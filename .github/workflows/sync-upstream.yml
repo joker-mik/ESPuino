@@ -1,0 +1,78 @@
+name: Sync upstream
+
+on:
+  # Ermöglicht einen manuellen Test über die Actions-Seite.
+  workflow_dispatch:
+
+  # Täglich um 03:17 UTC.
+  # Deutschland: 04:17 Uhr im Winter, 05:17 Uhr im Sommer.
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Update dev and custom
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Sync fork dev branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/merge-upstream" \
+            -f branch=dev
+
+      - name: Merge dev into custom
+        id: merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          before="$(
+            gh api \
+              "repos/${GITHUB_REPOSITORY}/branches/custom" \
+              --jq '.commit.sha'
+          )"
+
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/merges" \
+            -f base=custom \
+            -f head=dev \
+            -f commit_message="Merge upstream dev into custom"
+
+          after="$(
+            gh api \
+              "repos/${GITHUB_REPOSITORY}/branches/custom" \
+              --jq '.commit.sha'
+          )"
+
+          if [ "$before" != "$after" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "custom wurde aktualisiert."
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Keine neuen Änderungen vorhanden."
+          fi
+
+      - name: Start custom firmware build
+        if: steps.merge.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run firmware-builds.yml \
+            --ref custom \
+            --repo "${GITHUB_REPOSITORY}"

@@ -218,7 +218,7 @@ void Led_ResetToNightBrightness(void) {
 	gLedSettings.Led_Brightness = gLedSettings.Led_NightBrightness;
 	Log_Println(ledsDimmedToNightmode, LOGLEVEL_INFO);
 #endif
-	Led_SetButtonLedsEnabled(true);
+	Led_SetButtonLedsEnabled(false);
 }
 
 uint8_t Led_GetBrightness(void) {

@@ -156,6 +156,7 @@ uint8_t Port_ChannelToBit(const uint8_t _channel) {
 	}
 }
 
+
 // Writes initial port-configuration (I/O) for port-expander PCA9555
 // If no output-channel is necessary, nothing has to be configured as all channels are in input-mode as per default (255)
 // So every bit representing an output-channel needs to be set to 0.
@@ -201,11 +202,27 @@ void Port_WriteInitMaskForOutputChannels(void) {
 	}
 	#endif
 
-	#ifdef BUTTONS_LED
-	if (BUTTONS_LED >= 100 && BUTTONS_LED <= 107) {
-		OutputBitMaskInOutAsPerPort[0] &= ~(1 << Port_ChannelToBit(BUTTONS_LED));
-	} else if (BUTTONS_LED >= 108 && BUTTONS_LED <= 115) {
-		OutputBitMaskInOutAsPerPort[1] &= ~(1 << Port_ChannelToBit(BUTTONS_LED));
+	#ifdef BUTTONS_LED_NEXT
+	if (BUTTONS_LED_NEXT >= 100 && BUTTONS_LED_NEXT <= 107) {
+		OutputBitMaskInOutAsPerPort[0] &= ~(1 << Port_ChannelToBit(BUTTONS_LED_NEXT));
+	} else if (BUTTONS_LED_NEXT >= 108 && BUTTONS_LED_NEXT <= 115) {
+		OutputBitMaskInOutAsPerPort[1] &= ~(1 << Port_ChannelToBit(BUTTONS_LED_NEXT));
+	}
+	#endif
+
+	#ifdef BUTTONS_LED_PREVIOUS
+	if (BUTTONS_LED_PREVIOUS >= 100 && BUTTONS_LED_PREVIOUS <= 107) {
+		OutputBitMaskInOutAsPerPort[0] &= ~(1 << Port_ChannelToBit(BUTTONS_LED_PREVIOUS));
+	} else if (BUTTONS_LED_PREVIOUS >= 108 && BUTTONS_LED_PREVIOUS <= 115) {
+		OutputBitMaskInOutAsPerPort[1] &= ~(1 << Port_ChannelToBit(BUTTONS_LED_PREVIOUS));
+	}
+	#endif
+
+	#ifdef BUTTONS_LED_PAUSEPLAY
+	if (BUTTONS_LED_PAUSEPLAY >= 100 && BUTTONS_LED_PAUSEPLAY <= 107) {
+		OutputBitMaskInOutAsPerPort[0] &= ~(1 << Port_ChannelToBit(BUTTONS_LED_PAUSEPLAY));
+	} else if (BUTTONS_LED_PAUSEPLAY >= 108 && BUTTONS_LED_PAUSEPLAY <= 115) {
+		OutputBitMaskInOutAsPerPort[1] &= ~(1 << Port_ChannelToBit(BUTTONS_LED_PAUSEPLAY));
 	}
 	#endif
 
@@ -279,11 +296,27 @@ void Port_MakeSomeChannelsOutputForShutdown(void) {
 	}
 	#endif
 
-	#ifdef BUTTONS_LED
-	if (BUTTONS_LED >= 100 && BUTTONS_LED <= 107) {
-		OutputBitMaskInOutAsPerPort[0] &= ~(1 << Port_ChannelToBit(BUTTONS_LED));
-	} else if (BUTTONS_LED >= 108 && BUTTONS_LED <= 115) {
-		OutputBitMaskInOutAsPerPort[1] &= ~(1 << Port_ChannelToBit(BUTTONS_LED));
+	#ifdef BUTTONS_LED_NEXT
+	if (BUTTONS_LED_NEXT >= 100 && BUTTONS_LED_NEXT <= 107) {
+		OutputBitMaskInOutAsPerPort[0] &= ~(1 << Port_ChannelToBit(BUTTONS_LED_NEXT));
+	} else if (BUTTONS_LED_NEXT >= 108 && BUTTONS_LED_NEXT <= 115) {
+		OutputBitMaskInOutAsPerPort[1] &= ~(1 << Port_ChannelToBit(BUTTONS_LED_NEXT));
+	}
+	#endif
+
+	#ifdef BUTTONS_LED_PREVIOUS
+	if (BUTTONS_LED_PREVIOUS >= 100 && BUTTONS_LED_PREVIOUS <= 107) {
+		OutputBitMaskInOutAsPerPort[0] &= ~(1 << Port_ChannelToBit(BUTTONS_LED_PREVIOUS));
+	} else if (BUTTONS_LED_PREVIOUS >= 108 && BUTTONS_LED_PREVIOUS <= 115) {
+		OutputBitMaskInOutAsPerPort[1] &= ~(1 << Port_ChannelToBit(BUTTONS_LED_PREVIOUS));
+	}
+	#endif
+
+	#ifdef BUTTONS_LED_PAUSEPLAY
+	if (BUTTONS_LED_PAUSEPLAY >= 100 && BUTTONS_LED_PAUSEPLAY <= 107) {
+		OutputBitMaskInOutAsPerPort[0] &= ~(1 << Port_ChannelToBit(BUTTONS_LED_PAUSEPLAY));
+	} else if (BUTTONS_LED_PAUSEPLAY >= 108 && BUTTONS_LED_PAUSEPLAY <= 115) {
+		OutputBitMaskInOutAsPerPort[1] &= ~(1 << Port_ChannelToBit(BUTTONS_LED_PAUSEPLAY));
 	}
 	#endif
 

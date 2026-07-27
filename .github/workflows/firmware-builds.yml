@@ -119,3 +119,47 @@ jobs:
           git add Firmwares/${{ github.ref_name }}
           git commit -m "Firmware built from commit joker-mik/ESPuino@${{ github.sha }}" || echo "No changes to commit"
           git push
+  release:
+    name: Create GitHub release
+    if: ${{ github.repository == 'joker-mik/ESPuino' && github.ref_name == 'custom' && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    needs: test_builds
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download firmware artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: lolin_d32_pro_sdmmc_pe
+          path: release
+
+      - name: Show release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -la release
+
+          if ! compgen -G "release/*.bin" > /dev/null; then
+            echo "Keine Firmwaredateien gefunden."
+            exit 1
+          fi
+
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          short_sha="${GITHUB_SHA::7}"
+          tag="custom-${GITHUB_RUN_NUMBER}-${short_sha}"
+
+          gh release create "$tag" \
+            release/*.bin \
+            --target "$GITHUB_SHA" \
+            --title "ESPuino Custom ${short_sha}" \
+            --notes "Automatischer Build für lolin_d32_pro_sdmmc_pe aus dem Branch custom." \
+            --prerelease

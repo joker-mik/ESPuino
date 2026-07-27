@@ -72,7 +72,9 @@
     #define BUTTON_4                        104         // Button 4: connected to port-expander
     #define BUTTON_5                        105         // Button 5: connected to port-expander
 
-    //#define BUTTONS_LED                   114         // Powers the LEDs of the buttons. Make sure the current consumed by the LEDs can be handled by the used GPIO
+    #define BUTTONS_LED_NEXT                112         // Powers the LEDs of the buttons. Make sure the current consumed by the LEDs can be handled by the used GPIO  Eigene Aenderung: Fuer LED-Steuerung der Taster modifiziert
+    #define BUTTONS_LED_PREVIOUS            113         // Powers the LEDs of the buttons. Make sure the current consumed by the LEDs can be handled by the used GPIO  Eigene Aenderung: Fuer LED-Steuerung der Taster modifiziert
+    #define BUTTONS_LED_PAUSEPLAY           114         // Powers the LEDs of the buttons. Make sure the current consumed by the LEDs can be handled by the used GPIO  Eigene Aenderung: Fuer LED-Steuerung der Taster modifiziert
 
     // Channels of port-expander can be read cyclic or interrupt-driven. It's strongly recommended to use the interrupt-way!
     // Infos: https://forum.espuino.de/t/einsatz-des-port-expanders-pca9555/306

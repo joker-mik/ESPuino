@@ -2400,6 +2400,7 @@
 						<label for="githubBranchSel" class="me-1" data-i18n="tools.fwupdate.github.branch"></label>
 						<select class="form-control form-select" id="githubBranchSel" style="width: auto;">
 							<!-- Do not translate those texts! -->
+							<option value="custom">custom</option>
 							<option value="dev">dev</option>
 							<option value="master">master</option>
 						</select>
@@ -2842,8 +2843,11 @@
 				}
 			});
 		});
-		/* Firmware Update via GitHub (biologist79/ESPuino-Firmware) */
-		const GITHUB_FW_REPO = "biologist79/ESPuino-Firmware";
+		/* Firmware Update via GitHub */
+		const OFFICIAL_GITHUB_FW_REPO = "biologist79/ESPuino-Firmware";
+		const CUSTOM_GITHUB_FW_REPO = "joker-mik/ESPuino-Firmware";
+		const OFFICIAL_ESPUINO_REPO = "biologist79/ESPuino";
+		const CUSTOM_ESPUINO_REPO = "joker-mik/ESPuino";
 		let githubFirmwareInitialized = false;
 		let githubPlatform = '';
 
@@ -2879,6 +2883,12 @@
 
 		async function checkGithubFirmwareBuilds() {
 			const branch = $('#githubBranchSel').val();
+			const firmwareRepo = branch === 'custom'
+				? CUSTOM_GITHUB_FW_REPO
+				: OFFICIAL_GITHUB_FW_REPO;
+			const sourceRepo = branch === 'custom'
+				? CUSTOM_ESPUINO_REPO
+				: OFFICIAL_ESPUINO_REPO;
 			// firmware repo languages are DE/EN/FR, matching i18next's 2-letter codes
 			const lang = (i18next.language || 'en').toUpperCase();
 			const path = `Firmwares/${branch}/${githubPlatform}/firmware-${lang}.bin`;
@@ -2886,7 +2896,7 @@
 			list.empty().append($('<li class="list-group-item"></li>').text(i18next.t("tools.fwupdate.github.searching")));
 			new bootstrap.Modal(document.getElementById('githubBuildListModal')).show();
 			try {
-				const resp = await fetch(`https://api.github.com/repos/${GITHUB_FW_REPO}/commits?path=${encodeURIComponent(path)}&per_page=10&sha=main`);
+				const resp = await fetch(`https://api.github.com/repos/${firmwareRepo}/commits?path=${encodeURIComponent(path)}&per_page=10&sha=main`);
 				if (!resp.ok) {
 					throw new Error(resp.statusText);
 				}
@@ -2908,13 +2918,13 @@
 					const textSpan = $('<span></span>').append(document.createTextNode(label + " "));
 					if (fullSha) {
 						const commitLink = $('<a target="_blank" rel="noopener noreferrer"></a>')
-							.attr('href', `https://github.com/biologist79/ESPuino/commit/${fullSha}`)
+							.attr('href', `https://github.com/${sourceRepo}/commit/${fullSha}`)
 							.text(commitShort);
 						textSpan.append(commitLink);
 						// Fetch the ESPuino commit's own message to show as a hover tooltip. Fire and
 						// forget - don't block rendering the list on it, and silently skip on failure
 						// (e.g. GitHub API rate-limit) since the tooltip is a nice-to-have, not essential.
-						fetch(`https://api.github.com/repos/biologist79/ESPuino/commits/${fullSha}`)
+						fetch(`https://api.github.com/repos/${sourceRepo}/commits/${fullSha}`)
 							.then(r => r.ok ? r.json() : null)
 							.then(data => {
 								if (data && data.commit && data.commit.message) {
@@ -2930,7 +2940,7 @@
 					btn.on('click', function () {
 						const prompt = i18next.t("tools.fwupdate.github.installPrompt", { date: date, commit: commitShort, platform: githubPlatform, branch: branch, language: lang });
 						if (confirm(prompt)) {
-							installGithubFirmware(c.sha, path);
+							installGithubFirmware(firmwareRepo, c.sha, path);
 						}
 					});
 					li.append(btn);
@@ -2942,8 +2952,8 @@
 			}
 		}
 
-		async function installGithubFirmware(sha, path) {
-			const rawUrl = `https://raw.githubusercontent.com/${GITHUB_FW_REPO}/${sha}/${path}`;
+		async function installGithubFirmware(firmwareRepo, sha, path) {
+			const rawUrl = `https://raw.githubusercontent.com/${firmwareRepo}/${sha}/${path}`;
 			const gup = $('#githubUpdateProgress');
 			gup.show().addClass('bg-primary bg-opacity-75');
 			$('.progress-bar', gup).removeClass('bg-danger').css('width', '0%');

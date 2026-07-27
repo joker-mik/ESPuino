@@ -6,6 +6,7 @@ on:
     branches:
       - dev
       - master
+      - custom
   pull_request:
     paths:
       - "src/*"
@@ -97,7 +98,7 @@ jobs:
       - name: Checkout target repository
         uses: actions/checkout@v4
         with:
-          repository: biologist79/ESPuino-Firmware
+          repository: joker-mik/ESPuino-Firmware
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: target-repo
 

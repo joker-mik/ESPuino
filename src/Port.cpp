@@ -156,7 +156,6 @@ uint8_t Port_ChannelToBit(const uint8_t _channel) {
 	}
 }
 
-
 // Writes initial port-configuration (I/O) for port-expander PCA9555
 // If no output-channel is necessary, nothing has to be configured as all channels are in input-mode as per default (255)
 // So every bit representing an output-channel needs to be set to 0.

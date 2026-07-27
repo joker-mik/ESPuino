@@ -44,6 +44,7 @@ static CRGB *leds = nullptr;
 TaskHandle_t Led_TaskHandle;
 static void Led_Task(void *parameter);
 static uint8_t Led_Address(uint8_t number);
+void Led_SetButtonLedsEnabled(boolean value);
 
 // animation-functions prototypes
 AnimationReturnType Animation_PlaylistProgress(const bool startNewAnimation, CRGBSet &leds);
@@ -209,9 +210,7 @@ void Led_ResetToInitialBrightness(void) {
 		Log_Println(ledsDimmedToInitialValue, LOGLEVEL_INFO);
 	}
 #endif
-#ifdef BUTTONS_LED
-	Port_Write(BUTTONS_LED, HIGH, false);
-#endif
+	Led_SetButtonLedsEnabled(true);
 }
 
 void Led_ResetToNightBrightness(void) {
@@ -219,9 +218,7 @@ void Led_ResetToNightBrightness(void) {
 	gLedSettings.Led_Brightness = gLedSettings.Led_NightBrightness;
 	Log_Println(ledsDimmedToNightmode, LOGLEVEL_INFO);
 #endif
-#ifdef BUTTONS_LED
-	Port_Write(BUTTONS_LED, LOW, false);
-#endif
+	Led_SetButtonLedsEnabled(true);
 }
 
 uint8_t Led_GetBrightness(void) {
@@ -235,9 +232,7 @@ uint8_t Led_GetBrightness(void) {
 void Led_SetBrightness(uint8_t value) {
 #ifdef NEOPIXEL_ENABLE
 	gLedSettings.Led_Brightness = value;
-	#ifdef BUTTONS_LED
-	Port_Write(BUTTONS_LED, value <= gLedSettings.Led_NightBrightness ? LOW : HIGH, false);
-	#endif
+	Led_SetButtonLedsEnabled(value > gLedSettings.Led_NightBrightness);
 
 	#ifdef MQTT_ENABLE
 	publishMqtt(topicLedBrightness, static_cast<uint32_t>(gLedSettings.Led_Brightness), false);
@@ -344,8 +339,16 @@ void Led_DrawControls(CRGB *leds) {
 #endif
 
 void Led_SetButtonLedsEnabled(boolean value) {
-#ifdef BUTTONS_LED
-	Port_Write(BUTTONS_LED, value ? HIGH : LOW, false);
+#ifdef BUTTONS_LED_NEXT
+	Port_Write(BUTTONS_LED_NEXT, value ? HIGH : LOW, false);
+#endif
+
+#ifdef BUTTONS_LED_PREVIOUS
+	Port_Write(BUTTONS_LED_PREVIOUS, value ? HIGH : LOW, false);
+#endif
+
+#ifdef BUTTONS_LED_PAUSEPLAY
+	Port_Write(BUTTONS_LED_PAUSEPLAY, value ? HIGH : LOW, false);
 #endif
 }
 

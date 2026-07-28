@@ -66,10 +66,10 @@ AnimationReturnType Animation_Speech(const bool startNewAnimation, CRGBSet &leds
 static constexpr uint32_t BUTTON_LED_UPDATE_INTERVAL_MS = 50u;
 static constexpr uint32_t BUTTON_LED_BLINK_INTERVAL_MS = 1000u;
 
-static std::atomic<uint8_t> s_buttonLedMode{static_cast<uint8_t>(ButtonLedMode::On)};
-static std::atomic<bool> s_buttonLedRefreshRequested{true};
-static std::atomic<bool> s_buttonLedUpdatesEnabled{false};
-static std::atomic<uint8_t> s_buttonLedLastState{0xffu};
+static std::atomic<uint8_t> s_buttonLedMode { static_cast<uint8_t>(ButtonLedMode::On) };
+static std::atomic<bool> s_buttonLedRefreshRequested { true };
+static std::atomic<bool> s_buttonLedUpdatesEnabled { false };
+static std::atomic<uint8_t> s_buttonLedLastState { 0xffu };
 static uint32_t s_buttonLedLastUpdate = 0u;
 static uint32_t s_buttonLedPauseStarted = 0u;
 static bool s_buttonLedWasPaused = false;
@@ -433,9 +433,9 @@ void Led_ButtonLedsCyclic(void) {
 
 	const ButtonLedMode mode = Led_GetButtonLedMode();
 	bool allowedByBrightness = true;
-#ifdef NEOPIXEL_ENABLE
+	#ifdef NEOPIXEL_ENABLE
 	allowedByBrightness = gLedSettings.Led_Brightness > gLedSettings.Led_NightBrightness;
-#endif
+	#endif
 
 	if (mode == ButtonLedMode::Off || !allowedByBrightness) {
 		s_buttonLedWasPaused = false;

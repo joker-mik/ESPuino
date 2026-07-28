@@ -66,7 +66,14 @@ AnimationReturnType Animation_Speech(const bool startNewAnimation, CRGBSet &leds
 static constexpr uint32_t BUTTON_LED_UPDATE_INTERVAL_MS = 50u;
 static constexpr uint32_t BUTTON_LED_BLINK_INTERVAL_MS = 1000u;
 
-static std::atomic<uint8_t> s_buttonLedMode{static_cast<uint8_t>(ButtonLedMode::On)};
+static std::atomic<uint8_t> s_buttonLedMode{
+    static_cast<uint8_t>(ButtonLedMode::On)};
+static std::atomic<bool> s_buttonLedRefreshRequested{true};
+static std::atomic<bool> s_buttonLedUpdatesEnabled{false};
+static std::atomic<uint8_t> s_buttonLedLastState{0xffu};
+
+static std::atomic<uint8_t> s_buttonLedMode{
+    static_cast<uint8_t>(ButtonLedMode::On)};
 static std::atomic<bool> s_buttonLedRefreshRequested{true};
 static std::atomic<bool> s_buttonLedUpdatesEnabled{false};
 static std::atomic<uint8_t> s_buttonLedLastState{0xffu};

@@ -66,11 +66,10 @@ AnimationReturnType Animation_Speech(const bool startNewAnimation, CRGBSet &leds
 static constexpr uint32_t BUTTON_LED_UPDATE_INTERVAL_MS = 50u;
 static constexpr uint32_t BUTTON_LED_BLINK_INTERVAL_MS = 1000u;
 
-static std::atomic<uint8_t> s_buttonLedMode {static_cast<uint8_t>(ButtonLedMode::On)};
-static std::atomic<bool> s_buttonLedRefreshRequested {true};
-static std::atomic<bool> s_buttonLedUpdatesEnabled {false};
-static std::atomic<uint8_t> s_buttonLedLastState {0xffu};
-
+static std::atomic<uint8_t> s_buttonLedMode { static_cast<uint8_t>(ButtonLedMode::On) };
+static std::atomic<bool> s_buttonLedRefreshRequested { true };
+static std::atomic<bool> s_buttonLedUpdatesEnabled { false };
+static std::atomic<uint8_t> s_buttonLedLastState { 0x80u };
 static uint32_t s_buttonLedLastUpdate = 0u;
 static uint32_t s_buttonLedPauseStarted = 0u;
 static bool s_buttonLedWasPaused = false;
@@ -81,24 +80,26 @@ static void Led_RequestButtonLedRefresh(void) {
 
 static void Led_WriteButtonLeds(bool nextOn, bool previousOn, bool pausePlayOn, bool force = false) {
 	const uint8_t state = (nextOn ? 0x01u : 0u) | (previousOn ? 0x02u : 0u) | (pausePlayOn ? 0x04u : 0u);
-	const uint8_t changed = state ^ s_buttonLedLastState.load();
+	const uint8_t lastState = s_buttonLedLastState.load();
+	const bool forceWrite = force || ((lastState & 0x80u) != 0u);
+	const uint8_t changed = state ^ (lastState & 0x07u);
 
-	if (!force && changed == 0u) {
+	if (!forceWrite && changed == 0u) {
 		return;
 	}
 
 #ifdef BUTTONS_LED_NEXT
-	if (force || (changed & 0x01u)) {
+	if (forceWrite || (changed & 0x01u)) {
 		Port_Write(BUTTONS_LED_NEXT, nextOn ? HIGH : LOW, false);
 	}
 #endif
 #ifdef BUTTONS_LED_PREVIOUS
-	if (force || (changed & 0x02u)) {
+	if (forceWrite || (changed & 0x02u)) {
 		Port_Write(BUTTONS_LED_PREVIOUS, previousOn ? HIGH : LOW, false);
 	}
 #endif
 #ifdef BUTTONS_LED_PAUSEPLAY
-	if (force || (changed & 0x04u)) {
+	if (forceWrite || (changed & 0x04u)) {
 		Port_Write(BUTTONS_LED_PAUSEPLAY, pausePlayOn ? HIGH : LOW, false);
 	}
 #endif
@@ -126,7 +127,7 @@ static void Led_LoadButtonLedMode(void) {
 	}
 
 	s_buttonLedMode.store(mode);
-	s_buttonLedLastState.store(0xffu);
+	s_buttonLedLastState.store(0x80u);
 	Led_RequestButtonLedRefresh();
 }
 
@@ -412,6 +413,7 @@ void Led_DrawControls(CRGB *leds) {
 
 void Led_SetButtonLedMode(ButtonLedMode mode) {
 	s_buttonLedMode.store(static_cast<uint8_t>(mode));
+	s_buttonLedLastState.store(0x80u);
 	Led_RequestButtonLedRefresh();
 }
 

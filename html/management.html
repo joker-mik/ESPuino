@@ -1969,6 +1969,34 @@
 							</div>
 						</fieldset>
 					</div>
+					<div class="col-md-12 mb-4" id="buttonLedConfig" data-visible="false">
+						<fieldset>
+							<legend class="w-auto" data-i18n="general.buttonleds.title"></legend>
+							<div class="settings-group-card">
+								<div class="row mb-2 align-items-center">
+									<div class="col-sm-4 d-flex align-items-center gap-2">
+										<label for="buttonLedMode" class="col-form-label"
+											data-i18n="general.buttonleds.mode"></label>
+										<a href="#" class="link-secondary" data-bs-toggle="popover"
+											data-i18n="[data-bs-content]general.buttonleds.modeExp" tabindex="0"><i
+												class="fas fa-circle-question"></i></a>
+									</div>
+									<div class="col-sm-8">
+										<select id="buttonLedMode" name="buttonLedMode" class="form-control form-select"
+											onchange="updateButtonLedModeInfo()">
+											<option value="0" data-i18n="general.buttonleds.off"></option>
+											<option value="1" selected data-i18n="general.buttonleds.on"></option>
+											<option value="2" data-i18n="general.buttonleds.dynamic"></option>
+										</select>
+									</div>
+								</div>
+								<div id="buttonLedDynamicInfo" class="alert alert-info mt-3 mb-0 d-none" role="alert">
+									<i class="fas fa-circle-info me-2"></i>
+									<span data-i18n="general.buttonleds.dynamicInfo"></span>
+								</div>
+							</div>
+						</fieldset>
+					</div>
 					<div class="col-md-12 mb-4" id="ledSettingsConfig">
 						<fieldset>
 							<legend class="w-auto" data-i18n="settingsex.led.title"></legend>
@@ -3612,6 +3640,10 @@
 		}
 
 		// list the LED control colors
+		function updateButtonLedModeInfo() {
+			$('#buttonLedDynamicInfo').toggleClass('d-none', $('#buttonLedMode').val() !== '2');
+		}
+
 		function listControlColors(numControlColor, data) {
 			console.log(data);
 			const list = $("#controlColorList");
@@ -3881,6 +3913,11 @@
 			let ledSettings = settings.led;
 			if (ledSettings) {
 				document.getElementById('neopixelConfig').setAttribute('data-visible', true);
+				if (typeof ledSettings.buttonLedMode === 'number') {
+					document.getElementById('buttonLedConfig').setAttribute('data-visible', true);
+					$('#buttonLedMode').val(ledSettings.buttonLedMode);
+					updateButtonLedModeInfo();
+				}
 				$('#initBrightness').bootstrapSlider('setValue', ledSettings.initBrightness);
 				$('#nightBrightness').bootstrapSlider('setValue', ledSettings.nightBrightness);
 				$('#atmoBrightness').bootstrapSlider('setValue', ledSettings.atmoBrightness);
@@ -4334,6 +4371,7 @@
 					initBrightness: Number($('#initBrightness').val()),
 					nightBrightness: Number($('#nightBrightness').val()),
 					atmoBrightness: Number($('#atmoBrightness').val()),
+					buttonLedMode: Number($('#buttonLedMode').val()),
 					numIndicator: Number(document.getElementById("led_numIndicator").value),
 					numControl: Number(document.getElementById("led_numControl").value),
 					controlColors: [],

@@ -44,7 +44,6 @@ static CRGB *leds = nullptr;
 TaskHandle_t Led_TaskHandle;
 static void Led_Task(void *parameter);
 static uint8_t Led_Address(uint8_t number);
-void Led_SetButtonLedsEnabled(boolean value);
 
 // animation-functions prototypes
 AnimationReturnType Animation_PlaylistProgress(const bool startNewAnimation, CRGBSet &leds);
@@ -63,6 +62,72 @@ AnimationReturnType Animation_Busy(const bool startNewAnimation, CRGBSet &leds);
 AnimationReturnType Animation_Pause(const bool startNewAnimation, CRGBSet &leds);
 AnimationReturnType Animation_Speech(const bool startNewAnimation, CRGBSet &leds);
 #endif
+
+static constexpr uint32_t BUTTON_LED_UPDATE_INTERVAL_MS = 50u;
+static constexpr uint32_t BUTTON_LED_BLINK_INTERVAL_MS = 1000u;
+
+static std::atomic<uint8_t> s_buttonLedMode{static_cast<uint8_t>(ButtonLedMode::On)};
+static std::atomic<bool> s_buttonLedRefreshRequested{true};
+static std::atomic<bool> s_buttonLedUpdatesEnabled{false};
+static std::atomic<uint8_t> s_buttonLedLastState{0xffu};
+static uint32_t s_buttonLedLastUpdate = 0u;
+static uint32_t s_buttonLedPauseStarted = 0u;
+static bool s_buttonLedWasPaused = false;
+
+static void Led_RequestButtonLedRefresh(void) {
+	s_buttonLedRefreshRequested.store(true);
+}
+
+static void Led_WriteButtonLeds(bool nextOn, bool previousOn, bool pausePlayOn, bool force = false) {
+	const uint8_t state = (nextOn ? 0x01u : 0u) | (previousOn ? 0x02u : 0u) | (pausePlayOn ? 0x04u : 0u);
+	const uint8_t changed = state ^ s_buttonLedLastState.load();
+
+	if (!force && changed == 0u) {
+		return;
+	}
+
+#ifdef BUTTONS_LED_NEXT
+	if (force || (changed & 0x01u)) {
+		Port_Write(BUTTONS_LED_NEXT, nextOn ? HIGH : LOW, false);
+	}
+#endif
+#ifdef BUTTONS_LED_PREVIOUS
+	if (force || (changed & 0x02u)) {
+		Port_Write(BUTTONS_LED_PREVIOUS, previousOn ? HIGH : LOW, false);
+	}
+#endif
+#ifdef BUTTONS_LED_PAUSEPLAY
+	if (force || (changed & 0x04u)) {
+		Port_Write(BUTTONS_LED_PAUSEPLAY, pausePlayOn ? HIGH : LOW, false);
+	}
+#endif
+
+	s_buttonLedLastState.store(state);
+}
+
+static void Led_LoadButtonLedMode(void) {
+	uint8_t mode = static_cast<uint8_t>(ButtonLedMode::On);
+
+	if (gPrefsSettings.isKey("btnLedMode")) {
+		mode = gPrefsSettings.getUChar("btnLedMode", mode);
+	} else if (gPrefsSettings.isKey("btnLedEn")) {
+		// Migrate the former boolean button-LED setting.
+		mode = gPrefsSettings.getBool("btnLedEn", true)
+			? static_cast<uint8_t>(ButtonLedMode::On)
+			: static_cast<uint8_t>(ButtonLedMode::Off);
+		gPrefsSettings.putUChar("btnLedMode", mode);
+		gPrefsSettings.remove("btnLedEn");
+	}
+
+	if (mode > static_cast<uint8_t>(ButtonLedMode::Dynamic)) {
+		mode = static_cast<uint8_t>(ButtonLedMode::On);
+		gPrefsSettings.putUChar("btnLedMode", mode);
+	}
+
+	s_buttonLedMode.store(mode);
+	s_buttonLedLastState.store(0xffu);
+	Led_RequestButtonLedRefresh();
+}
 
 #ifdef NEOPIXEL_ENABLE
 bool Led_LoadSettings(LedSettings &settings) {
@@ -154,6 +219,9 @@ bool Led_LoadSettings(LedSettings &settings) {
 #endif
 
 void Led_Init(void) {
+	Led_LoadButtonLedMode();
+	s_buttonLedUpdatesEnabled.store(true);
+
 #ifdef NEOPIXEL_ENABLE
 
 	if (Led_TaskHandle) {
@@ -179,6 +247,9 @@ void Led_Init(void) {
 }
 
 void Led_Exit(void) {
+	s_buttonLedUpdatesEnabled.store(false);
+	Led_WriteButtonLeds(false, false, false, true);
+
 #ifdef NEOPIXEL_ENABLE
 	Log_Println("shutdown LED..", LOGLEVEL_NOTICE);
 	if (Led_TaskHandle) {
@@ -210,7 +281,7 @@ void Led_ResetToInitialBrightness(void) {
 		Log_Println(ledsDimmedToInitialValue, LOGLEVEL_INFO);
 	}
 #endif
-	Led_SetButtonLedsEnabled(true);
+	Led_RequestButtonLedRefresh();
 }
 
 void Led_ResetToNightBrightness(void) {
@@ -218,7 +289,7 @@ void Led_ResetToNightBrightness(void) {
 	gLedSettings.Led_Brightness = gLedSettings.Led_NightBrightness;
 	Log_Println(ledsDimmedToNightmode, LOGLEVEL_INFO);
 #endif
-	Led_SetButtonLedsEnabled(false);
+	Led_RequestButtonLedRefresh();
 }
 
 uint8_t Led_GetBrightness(void) {
@@ -232,7 +303,7 @@ uint8_t Led_GetBrightness(void) {
 void Led_SetBrightness(uint8_t value) {
 #ifdef NEOPIXEL_ENABLE
 	gLedSettings.Led_Brightness = value;
-	Led_SetButtonLedsEnabled(value > gLedSettings.Led_NightBrightness);
+	Led_RequestButtonLedRefresh();
 
 	#ifdef MQTT_ENABLE
 	publishMqtt(topicLedBrightness, static_cast<uint32_t>(gLedSettings.Led_Brightness), false);
@@ -338,17 +409,85 @@ void Led_DrawControls(CRGB *leds) {
 }
 #endif
 
-void Led_SetButtonLedsEnabled(boolean value) {
-#ifdef BUTTONS_LED_NEXT
-	Port_Write(BUTTONS_LED_NEXT, value ? HIGH : LOW, false);
+void Led_SetButtonLedMode(ButtonLedMode mode) {
+	s_buttonLedMode.store(static_cast<uint8_t>(mode));
+	Led_RequestButtonLedRefresh();
+}
+
+ButtonLedMode Led_GetButtonLedMode(void) {
+	return static_cast<ButtonLedMode>(s_buttonLedMode.load());
+}
+
+void Led_ButtonLedsCyclic(void) {
+#if defined(BUTTONS_LED_NEXT) || defined(BUTTONS_LED_PREVIOUS) || defined(BUTTONS_LED_PAUSEPLAY)
+	if (!s_buttonLedUpdatesEnabled.load()) {
+		return;
+	}
+
+	const uint32_t now = millis();
+	const bool refreshRequested = s_buttonLedRefreshRequested.exchange(false);
+	if (!refreshRequested && (now - s_buttonLedLastUpdate < BUTTON_LED_UPDATE_INTERVAL_MS)) {
+		return;
+	}
+	s_buttonLedLastUpdate = now;
+
+	const ButtonLedMode mode = Led_GetButtonLedMode();
+	bool allowedByBrightness = true;
+#ifdef NEOPIXEL_ENABLE
+	allowedByBrightness = gLedSettings.Led_Brightness > gLedSettings.Led_NightBrightness;
 #endif
 
-#ifdef BUTTONS_LED_PREVIOUS
-	Port_Write(BUTTONS_LED_PREVIOUS, value ? HIGH : LOW, false);
-#endif
+	if (mode == ButtonLedMode::Off || !allowedByBrightness) {
+		s_buttonLedWasPaused = false;
+		Led_WriteButtonLeds(false, false, false);
+		return;
+	}
 
-#ifdef BUTTONS_LED_PAUSEPLAY
-	Port_Write(BUTTONS_LED_PAUSEPLAY, value ? HIGH : LOW, false);
+	if (mode == ButtonLedMode::On) {
+		s_buttonLedWasPaused = false;
+		Led_WriteButtonLeds(true, true, true);
+		return;
+	}
+
+	// Dynamic mode: keep all LEDs off while idle, busy or after the playlist ended.
+	Playlist *playlist = gPlayProperties.playlist;
+	const bool playlistActive = playlist != nullptr
+		&& !playlist->empty()
+		&& gPlayProperties.playMode != NO_PLAYLIST
+		&& gPlayProperties.playMode != BUSY
+		&& !gPlayProperties.playlistFinished;
+
+	if (!playlistActive) {
+		s_buttonLedWasPaused = false;
+		Led_WriteButtonLeds(false, false, false);
+		return;
+	}
+
+	const size_t trackCount = playlist->size();
+	const size_t trackNumber = static_cast<size_t>(gPlayProperties.currentTrackNumber);
+	if (trackNumber >= trackCount) {
+		s_buttonLedWasPaused = false;
+		Led_WriteButtonLeds(false, false, false);
+		return;
+	}
+
+	bool nextOn = false;
+	bool previousOn = false;
+	if (gPlayProperties.playMode != WEBSTREAM) {
+		previousOn = trackNumber > 0u;
+		nextOn = gPlayProperties.repeatPlaylist || (trackNumber + 1u < trackCount);
+	}
+
+	const bool paused = gPlayProperties.pausePlay;
+	if (paused && !s_buttonLedWasPaused) {
+		s_buttonLedPauseStarted = now;
+	}
+	s_buttonLedWasPaused = paused;
+
+	const bool pausePlayOn = !paused
+		|| (((now - s_buttonLedPauseStarted) / BUTTON_LED_BLINK_INTERVAL_MS) % 2u == 0u);
+
+	Led_WriteButtonLeds(nextOn, previousOn, pausePlayOn);
 #endif
 }
 

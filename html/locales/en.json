@@ -531,6 +531,15 @@
 			"nightmodeExp": "Reduced LED brightness in night mode.",
 			"atmomodeExp": "LED brightness in ambient light mode (Atmolight)."
 		},
+		"buttonleds": {
+			"title": "Button LEDs",
+			"mode": "Mode",
+			"modeExp": "Defines how the illuminated buttons are controlled. In night mode the button LEDs remain off in On and Dynamic mode.",
+			"off": "Off",
+			"on": "On",
+			"dynamic": "Dynamic",
+			"dynamicInfo": "All button LEDs are off while idle. During playback, Previous and Next light only when the respective function is available. The Play LED is on during playback and blinks while paused."
+		},
 		"sleep": {
 			"title": "Deep Sleep",
 			"inactivity": "After n minutes inactivity",

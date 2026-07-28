@@ -39,6 +39,12 @@ enum class LedPlaylistProgressStates {
 	Done
 };
 
+enum class ButtonLedMode : uint8_t {
+	Off = 0,
+	On = 1,
+	Dynamic = 2
+};
+
 struct AnimationReturnType {
 	bool animationActive;
 	int32_t animationDelay;
@@ -102,6 +108,9 @@ void Led_SetBrightness(uint8_t value);
 void Led_TaskPause(void);
 void Led_TaskResume(void);
 void Led_ShowOtaProgress(uint8_t percent);
+void Led_ButtonLedsCyclic(void);
+void Led_SetButtonLedMode(ButtonLedMode mode);
+ButtonLedMode Led_GetButtonLedMode(void);
 
 void Led_SetNightmode(bool enabled);
 bool Led_GetNightmode();

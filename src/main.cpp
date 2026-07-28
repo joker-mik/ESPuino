@@ -235,6 +235,7 @@ void loop() {
 	AudioPlayer_Cyclic();
 	Battery_Cyclic();
 	Button_Cyclic();
+	Led_ButtonLedsCyclic();
 	System_Cyclic();
 	Rfid_PreferenceLookupHandler();
 

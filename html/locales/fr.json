@@ -531,6 +531,15 @@
 			"nightmodeExp": "Luminosité réduite des LED en mode nuit.",
 			"atmomodeExp": "Luminosité des LED en mode lumière d'ambiance (Atmolight)."
 		},
+		"buttonleds": {
+			"title": "LED des boutons",
+			"mode": "Mode",
+			"modeExp": "Définit le comportement de l’éclairage des boutons. En mode nuit, les LED des boutons restent éteintes dans les modes Activé et Dynamique.",
+			"off": "Désactivé",
+			"on": "Activé",
+			"dynamic": "Dynamique",
+			"dynamicInfo": "Toutes les LED des boutons sont éteintes au repos. Pendant la lecture, Précédent et Suivant ne s’allument que lorsque la fonction correspondante est disponible. La LED Lecture est allumée pendant la lecture et clignote en pause."
+		},
 		"sleep": {
 			"title": "Veille profonde",
 			"inactivity": "Après n minutes d'inactivité",

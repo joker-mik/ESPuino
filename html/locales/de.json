@@ -531,6 +531,15 @@
 			"nightmodeExp": "Reduzierte LED-Helligkeit im Nachtmodus.",
 			"atmomodeExp": "LED-Helligkeit im Ambient-Light-Modus (Atmolight)."
 		},
+		"buttonleds": {
+			"title": "Taster-LEDs",
+			"mode": "Betriebsart",
+			"modeExp": "Legt fest, wie die Beleuchtung der Taster gesteuert wird. Im Nachtmodus bleiben die Taster-LEDs in den Betriebsarten Ein und Dynamisch ausgeschaltet.",
+			"off": "Aus",
+			"on": "Ein",
+			"dynamic": "Dynamisch",
+			"dynamicInfo": "Im Leerlauf sind alle Taster-LEDs aus. Während der Wiedergabe leuchten Vor und Zurück nur, wenn die jeweilige Funktion verfügbar ist. Die Play-LED leuchtet bei Wiedergabe und blinkt bei Pause."
+		},
 		"sleep": {
 			"title": "Deep Sleep",
 			"inactivity": "Inaktivität nach (in Minuten)",

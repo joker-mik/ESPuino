@@ -19,13 +19,13 @@ void Power_PeripheralOn(void) {
 	Port_Write(POWER, POWER_ON, false);
 
 	#ifdef BUTTONS_LED_NEXT
-	Port_Write(BUTTONS_LED_NEXT, HIGH, false);
+	Port_Write(BUTTONS_LED_NEXT, LOW, false);
 	#endif
 	#ifdef BUTTONS_LED_PREVIOUS
-	Port_Write(BUTTONS_LED_PREVIOUS, HIGH, false);
+	Port_Write(BUTTONS_LED_PREVIOUS, LOW, false);
 	#endif
 	#ifdef BUTTONS_LED_PAUSEPLAY
-	Port_Write(BUTTONS_LED_PAUSEPLAY, HIGH, false);
+	Port_Write(BUTTONS_LED_PAUSEPLAY, LOW, false);
 	#endif
 
 	delay(50); // Give peripherals some time to settle down
@@ -35,8 +35,6 @@ void Power_PeripheralOn(void) {
 // Switch off peripherals. Please note: meaning of POWER_OFF is LOW per default. But is HIGH in case of INVERT_POWER is enabled.
 void Power_PeripheralOff(void) {
 #ifdef POWER
-	Port_Write(POWER, POWER_OFF, false);
-
 	#ifdef BUTTONS_LED_NEXT
 	Port_Write(BUTTONS_LED_NEXT, LOW, false);
 	#endif
@@ -46,5 +44,7 @@ void Power_PeripheralOff(void) {
 	#ifdef BUTTONS_LED_PAUSEPLAY
 	Port_Write(BUTTONS_LED_PAUSEPLAY, LOW, false);
 	#endif
+
+	Port_Write(POWER, POWER_OFF, false);
 #endif
 }

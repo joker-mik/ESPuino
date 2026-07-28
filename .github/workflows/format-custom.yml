@@ -1,0 +1,56 @@
+name: Format custom C++ files
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout custom branch
+        uses: actions/checkout@v5
+        with:
+          ref: custom
+          fetch-depth: 0
+
+      - name: Install clang-format 16
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-16
+
+      - name: Format changed C++ files
+        run: |
+          clang-format-16 -i \
+            src/Led.cpp \
+            src/Led.h \
+            src/main.cpp \
+            src/Power.cpp \
+            src/Web.cpp
+
+      - name: Commit formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet; then
+            echo "Keine Formatänderungen notwendig."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            src/Led.cpp \
+            src/Led.h \
+            src/main.cpp \
+            src/Power.cpp \
+            src/Web.cpp
+
+          git commit -m "Apply clang-format 16"
+          git push origin HEAD:custom

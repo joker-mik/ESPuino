@@ -1836,6 +1836,7 @@
 											<td><select id="cmdselect_short_3" class="form-control form-select"></select></td>
 											<td><select id="cmdselect_long_3" class="form-control form-select"></select></td>
 										</tr>
+										<!-- Taster 4 und 5 in der Management-Oberflaeche deaktiviert.
 										<tr>
 											<td data-i18n="settingsex.buttons.button4"></td>
 											<td><select id="cmdselect_short_4" class="form-control form-select"></select></td>
@@ -1845,6 +1846,16 @@
 											<td data-i18n="settingsex.buttons.button5"></td>
 											<td><select id="cmdselect_short_5" class="form-control form-select"></select></td>
 											<td><select id="cmdselect_long_5" class="form-control form-select"></select></td>
+										</tr>
+										-->
+										<!-- Unsichtbare Platzhalter halten Laden/Speichern der bestehenden Werte kompatibel. -->
+										<tr style="display:none" aria-hidden="true">
+											<td colspan="3">
+												<select id="cmdselect_short_4"></select>
+												<select id="cmdselect_long_4"></select>
+												<select id="cmdselect_short_5"></select>
+												<select id="cmdselect_long_5"></select>
+											</td>
 										</tr>
 									</tbody>
 								</table>

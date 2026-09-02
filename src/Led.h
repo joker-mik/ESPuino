@@ -18,6 +18,7 @@ enum class LedAnimationType {
 	Error,
 	Ok,
 	VoltageWarning,
+	Download, // MediaHub file sync (concept §12): outranks normal playback feedback, since it runs before playback even starts
 	Volume,
 	BatteryMeasurement,
 	Rewind,
@@ -116,6 +117,7 @@ void Led_ShowOtaProgress(uint8_t percent);
 void Led_ButtonLedsCyclic(void);
 void Led_SetButtonLedMode(ButtonLedMode mode);
 ButtonLedMode Led_GetButtonLedMode(void);
+void Led_SetDownloadProgress(bool active, uint8_t percent = 0);
 
 void Led_SetNightmode(bool enabled);
 bool Led_GetNightmode();

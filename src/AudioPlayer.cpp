@@ -533,14 +533,8 @@ void AudioPlayer_Exit(void) {
 		// Call the loop explicitely to make sure that PAUSE is set (because this saves the current playpos)
 		AudioPlayer_Loop();
 	}
-	//delete audio;
-	//audio = nullptr;
-	if (audio != nullptr) {
-    // Laufende Wiedergabe vor dem Löschen sauber beenden.
-    audio->stopSong();
-    delete audio;
-    audio = nullptr;
-	}
+	delete audio;
+	audio = nullptr;
 }
 
 static uint32_t lastPlayingTimestamp = 0;

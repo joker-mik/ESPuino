@@ -57,10 +57,10 @@ jobs:
 
       - name: Install PlatformIO Core
         run: |
-          pip install -U setuptools platformio
+          pip install -U setuptools "platformio==6.1.19"
           # Stick to the stable PlatformIO core: "pio upgrade --dev" pulled an unreleased core whose
           # bundled SCons broke the link step (ModuleNotFoundError: SCons.Tool.FortranCommon).
-          pio pkg update --global
+          # pio pkg update --global causes sometimes errors (ModuleNotFoundError: No module named 'SCons.Tool.FortranCommon')
           mkdir binaries
 
       # --- Build 1: Language DE (Default) ---

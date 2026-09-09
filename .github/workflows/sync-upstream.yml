@@ -1,11 +1,8 @@
 name: Sync upstream
 
 on:
-  # Ermöglicht einen manuellen Test über die Actions-Seite.
   workflow_dispatch:
 
-  # Täglich um 03:17 UTC.
-  # Deutschland: 04:17 Uhr im Winter, 05:17 Uhr im Sommer.
   schedule:
     - cron: "17 3 * * *"
 
@@ -23,16 +20,36 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Sync fork dev branch
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Checkout fork dev branch
+        uses: actions/checkout@v5
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Sync fork dev branch without upstream workflows
         run: |
           set -euo pipefail
 
-          gh api \
-            --method POST \
-            "repos/${GITHUB_REPOSITORY}/merge-upstream" \
-            -f branch=dev
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream https://github.com/biologist79/ESPuino.git
+          git fetch --no-tags upstream dev
+
+          git restore \
+            --source=upstream/dev \
+            --staged \
+            --worktree \
+            -- . ':(exclude).github/workflows/**'
+
+          if git diff --cached --quiet; then
+            echo "dev ist bereits aktuell (Workflow-Dateien werden nicht synchronisiert)."
+          else
+            echo "Folgende Änderungen werden nach dev synchronisiert:"
+            git diff --cached --stat
+            git commit -m "Sync upstream dev (excluding GitHub workflows)"
+            git push origin HEAD:dev
+          fi
 
       - name: Merge dev into custom
         id: merge

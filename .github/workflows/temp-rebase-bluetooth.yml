@@ -19,7 +19,7 @@ jobs:
       - name: Rebase feature branch onto upstream dev
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git remote add upstream https://github.com/biologist79/ESPuino.git
@@ -27,15 +27,57 @@ jobs:
           git fetch origin improve-bluetooth-status
           git checkout -B rebase-result-temp origin/improve-bluetooth-status
 
-          if git rebase upstream/dev; then
-            git push origin HEAD:refs/heads/rebase-result-temp --force
-            exit 0
-          fi
+          set +e
+          git rebase upstream/dev
+          rc=$?
+          set -e
 
-          echo "=== REBASE FAILED ==="
-          git status --short
-          echo "=== UNMERGED FILES ==="
-          git diff --name-only --diff-filter=U
-          echo "=== CONFLICT DIFF ==="
-          git diff --cc || true
-          exit 1
+          while [ "$rc" -ne 0 ]; do
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            if [ "$conflicts" != "html/management.html" ]; then
+              echo "Unexpected conflict(s):"
+              printf '%s\n' "$conflicts"
+              git diff --cc || true
+              exit 1
+            fi
+
+            python3 - <<'PY'
+from pathlib import Path
+p = Path('html/management.html')
+text = p.read_text()
+lines = text.splitlines(True)
+out = []
+i = 0
+while i < len(lines):
+    if lines[i].startswith('<<<<<<< '):
+        i += 1
+        while i < len(lines) and not lines[i].startswith('======='):
+            i += 1
+        if i >= len(lines):
+            raise SystemExit('Malformed conflict: missing =======')
+        i += 1
+        incoming = []
+        while i < len(lines) and not lines[i].startswith('>>>>>>> '):
+            incoming.append(lines[i])
+            i += 1
+        if i >= len(lines):
+            raise SystemExit('Malformed conflict: missing >>>>>>>')
+        out.extend(incoming)
+        i += 1
+    else:
+        out.append(lines[i])
+        i += 1
+text = ''.join(out)
+text = text.replace('<a href="#" class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.device.explanation"',
+                    '<a class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.device.explanation"')
+text = text.replace('<a href="#" class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.pincode.explanation"',
+                    '<a class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.pincode.explanation"')
+p.write_text(text)
+PY
+
+            git add html/management.html
+            GIT_EDITOR=true git rebase --continue
+            rc=$?
+          done
+
+          git push origin HEAD:refs/heads/rebase-result-temp --force

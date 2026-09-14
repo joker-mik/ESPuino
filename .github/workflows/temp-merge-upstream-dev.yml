@@ -18,7 +18,7 @@ jobs:
           ref: improve-bluetooth-status
           fetch-depth: 0
 
-      - name: Inspect upstream merge conflict
+      - name: Merge current upstream dev
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
@@ -29,9 +29,55 @@ jobs:
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
-            echo "=== UNMERGED FILES ==="
+            python3 - <<'PY'
+            from pathlib import Path
+
+            path = Path("html/management.html")
+            text = path.read_text()
+            lines = text.splitlines(keepends=True)
+            out = []
+            i = 0
+            conflicts = 0
+            while i < len(lines):
+                if lines[i].startswith("<<<<<<< "):
+                    conflicts += 1
+                    i += 1
+                    ours = []
+                    while i < len(lines) and not lines[i].startswith("======="):
+                        ours.append(lines[i])
+                        i += 1
+                    if i >= len(lines):
+                        raise SystemExit("Malformed conflict: missing separator")
+                    i += 1
+                    while i < len(lines) and not lines[i].startswith(">>>>>>> "):
+                        i += 1
+                    if i >= len(lines):
+                        raise SystemExit("Malformed conflict: missing end marker")
+                    i += 1
+                    out.extend(ours)
+                else:
+                    out.append(lines[i])
+                    i += 1
+
+            if conflicts != 2:
+                raise SystemExit(f"Expected 2 management.html conflicts, found {conflicts}")
+
+            text = "".join(out)
+            # Preserve upstream's help-link fix inside the Bluetooth block we kept
+            # from the feature branch: href="#" caused the page to jump to the top.
+            text = text.replace('<a href="#" class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.device.explanation" tabindex="0">',
+                                '<a class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.device.explanation" tabindex="0">')
+            text = text.replace('<a href="#" class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.pincode.explanation" tabindex="0">',
+                                '<a class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.pincode.explanation" tabindex="0">')
+            path.write_text(text)
+            PY
+            git add html/management.html
+          fi
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo "Unresolved conflicts remain:"
             git diff --name-only --diff-filter=U
-            echo "=== CONFLICT MARKERS ==="
-            grep -n -B 20 -A 40 -E '^(<<<<<<<|=======|>>>>>>>)' html/management.html || true
             exit 1
           fi
+          git diff --check
+          git commit --no-edit
+          git push origin HEAD:improve-bluetooth-status

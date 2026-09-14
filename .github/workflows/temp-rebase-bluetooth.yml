@@ -42,42 +42,44 @@ jobs:
             fi
 
             python3 - <<'PY'
-from pathlib import Path
-p = Path('html/management.html')
-text = p.read_text()
-lines = text.splitlines(True)
-out = []
-i = 0
-while i < len(lines):
-    if lines[i].startswith('<<<<<<< '):
-        i += 1
-        while i < len(lines) and not lines[i].startswith('======='):
-            i += 1
-        if i >= len(lines):
-            raise SystemExit('Malformed conflict: missing =======')
-        i += 1
-        incoming = []
-        while i < len(lines) and not lines[i].startswith('>>>>>>> '):
-            incoming.append(lines[i])
-            i += 1
-        if i >= len(lines):
-            raise SystemExit('Malformed conflict: missing >>>>>>>')
-        out.extend(incoming)
-        i += 1
-    else:
-        out.append(lines[i])
-        i += 1
-text = ''.join(out)
-text = text.replace('<a href="#" class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.device.explanation"',
-                    '<a class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.device.explanation"')
-text = text.replace('<a href="#" class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.pincode.explanation"',
-                    '<a class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.pincode.explanation"')
-p.write_text(text)
-PY
+          from pathlib import Path
+          p = Path('html/management.html')
+          text = p.read_text()
+          lines = text.splitlines(True)
+          out = []
+          i = 0
+          while i < len(lines):
+              if lines[i].startswith('<<<<<<< '):
+                  i += 1
+                  while i < len(lines) and not lines[i].startswith('======='):
+                      i += 1
+                  if i >= len(lines):
+                      raise SystemExit('Malformed conflict: missing =======')
+                  i += 1
+                  incoming = []
+                  while i < len(lines) and not lines[i].startswith('>>>>>>> '):
+                      incoming.append(lines[i])
+                      i += 1
+                  if i >= len(lines):
+                      raise SystemExit('Malformed conflict: missing >>>>>>>')
+                  out.extend(incoming)
+                  i += 1
+              else:
+                  out.append(lines[i])
+                  i += 1
+          text = ''.join(out)
+          text = text.replace('<a href="#" class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.device.explanation"',
+                              '<a class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.device.explanation"')
+          text = text.replace('<a href="#" class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.pincode.explanation"',
+                              '<a class="link-secondary" data-bs-toggle="popover" data-i18n="[data-bs-content]bt.pincode.explanation"')
+          p.write_text(text)
+          PY
 
             git add html/management.html
+            set +e
             GIT_EDITOR=true git rebase --continue
             rc=$?
+            set -e
           done
 
           git push origin HEAD:refs/heads/rebase-result-temp --force

@@ -107,12 +107,24 @@
 			"gesturesExp": "Tant qu'un de ces boutons est maintenu, tourner le codeur rotatif déclenche l'action attribuée au lieu de changer le volume. « Tourner à droite » est le sens qui augmente le volume. L'appui long d'un tel bouton ne se déclenche qu'au relâchement - et pas du tout si le codeur a été tourné.",
 			"ccw": "tourner à gauche",
 			"cw": "tourner à droite",
-			"seekPreviewTitle": "Réglages de l'aperçu de recherche",
-			"seekPreviewTitleExp": "Réglages fins pour le geste 🎯 d'aperçu de recherche (voir tableau ci-dessus) : combien de temps attendre avant qu'un aperçu ne se valide automatiquement, et avec quelle précision la position cible peut être ajustée en tournant.",
+			"seekPreviewTitle": "Recherche avec le codeur rotatif",
+			"seekPreviewTitleExp": "Réglages fins pour la recherche avec le codeur rotatif : le geste d'aperçu 🎯 (voir tableau ci-dessus) et la recherche directe lorsqu'une action de rotation est affectée à avancer/reculer.",
 			"seekPrevDelay": "Délai avant validation [ms]",
 			"seekPrevDelayExp": "Durée (en ms) pendant laquelle le codeur doit rester immobile avant qu'un geste 🎯 d'aperçu de recherche ne saute de lui-même à la position prévisualisée. Relâcher le bouton maintenu valide toujours immédiatement, indépendamment de ce délai. 0-3000, par défaut 2000.",
 			"seekPrevSweep": "Crans pour un balayage complet",
-			"seekPrevSweepExp": "Nombre de crans du codeur nécessaires pour déplacer la cible de l'aperçu de recherche de 0% à 100% (LED bleue) du morceau. Plus bas = défilement plus grossier/rapide, plus haut = contrôle plus fin. Par défaut 40."
+			"seekPrevSweepExp": "Nombre de crans du codeur nécessaires pour déplacer la cible de l'aperçu de recherche de 0% à 100% (LED bleue) du morceau. Plus bas = défilement plus grossier/rapide, plus haut = contrôle plus fin. Par défaut 40.",
+			"rotSeekStep": "Pas de recherche par cran [s]",
+			"rotSeekStepExp": "Nombre de secondes parcourues par cran lorsqu'une action de rotation est affectée directement à avancer/reculer (et non à l'aperçu). À garder petit : une rotation rapide représente de nombreux crans d'un coup. 1-60, par défaut 10.",
+			"directSeekTitle": "Recherche directe",
+			"directSeekHint": "La variante simple : chaque cran avance ou recule immédiatement de la durée configurée - sans affichage ni attente. C'est plus direct, mais aussi plus grossier, car une rotation rapide représente de nombreux crans d'un coup et vous atterrissez d'autant plus loin. En contrepartie, cela fonctionne même si votre ESPuino n'a pas de Neopixels et qu'un aperçu n'aurait donc rien à montrer. C'est la configuration d'usine du codeur rotatif. S'applique lorsqu'une action de rotation ci-dessus est affectée à « avancer » ou « reculer ».",
+			"previewSeekTitle": "Aperçu de position",
+			"previewSeekHint": "La variante la plus confortable et le meilleur choix pour la plupart des gens. Dès que vous maintenez la touche affectée, l'anneau LED devient jaune - avant même que vous ne tourniez. C'est le signe que l'aperçu est actif. En tournant, la lecture proprement dite ne bouge alors pas du tout ; seul un repère bleu (curseur) se déplace vers l'endroit visé (si vous avez une seule LED au lieu d'un anneau, elle s'allume simplement en bleu pendant ce temps). La lecture n'y saute qu'au relâchement de la touche ou après un court arrêt de la rotation. Vous pouvez ainsi viser tranquillement en voyant ce que vous faites, au lieu d'avancer et reculer à l'aveugle. Les deux valeurs ci-dessous déterminent le délai d'attente après la dernière rotation et le nombre de crans nécessaires pour parcourir tout le morceau. S'applique lorsqu'une action de rotation ci-dessus est affectée à « aperçu de recherche »."
+		},
+		"seek": {
+			"title": "Recherche avec les touches",
+			"titleExp": "Pas de recherche pour les actions de touche « avancer » et « reculer ».",
+			"jumpOffset": "Pas de recherche par appui [s]",
+			"jumpOffsetExp": "Nombre de secondes parcourues à chaque appui sur « avancer » / « reculer » dans le morceau en cours. Effet immédiat après enregistrement. 1-120, par défaut 30."
 		}
 	},
 	"wifi": {

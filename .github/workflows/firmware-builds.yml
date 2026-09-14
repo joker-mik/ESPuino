@@ -6,6 +6,7 @@ on:
     branches:
       - dev
       - master
+      - test-build-improve-bluetooth-status
   pull_request:
     paths:
       - "src/*"

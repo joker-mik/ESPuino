@@ -1,0 +1,42 @@
+name: TEMP patch Bluetooth reconnect discovery
+
+on:
+  push:
+    branches:
+      - test-build-improve-bluetooth-status
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v5
+        with:
+          ref: improve-bluetooth-status
+          fetch-depth: 0
+
+      - name: Stop library discovery after source reconnect
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/Bluetooth.cpp")
+          text = path.read_text()
+          old = """\t\t\tBluetooth_ClearConnectionTarget();\n\t\t\tBluetooth_StopScan();\n\n\t\t\t// If discovery/selection did not already give us a trustworthy friendly\n"""
+          new = """\t\t\tBluetooth_ClearConnectionTarget();\n\n\t\t\t// The A2DP library can keep its own GAP inquiry running during auto-reconnect.\n\t\t\t// Stop discovery as soon as the source is connected so inquiry traffic does\n\t\t\t// not compete with the newly started audio stream. Manual web scans still\n\t\t\t// use Bluetooth_StopScan() so their UI/callback state is cleaned up as before.\n\t\t\tif (scanInProgress) {\n\t\t\t\tBluetooth_StopScan();\n\t\t\t} else {\n\t\t\t\tconst esp_err_t cancelResult = esp_bt_gap_cancel_discovery();\n\t\t\t\tif (cancelResult == ESP_OK) {\n\t\t\t\t\tLog_Println(\"Bluetooth => Device discovery stopped after connect.\", LOGLEVEL_NOTICE);\n\t\t\t\t} else if (cancelResult != ESP_ERR_INVALID_STATE) {\n\t\t\t\t\tLog_Printf(LOGLEVEL_NOTICE, \"Bluetooth => failed to stop discovery after connect: %s\", esp_err_to_name(cancelResult));\n\t\t\t\t}\n\t\t\t}\n\n\t\t\t// If discovery/selection did not already give us a trustworthy friendly\n"""
+          if text.count(old) != 1:
+              raise SystemExit(f"Expected exactly one patch target, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Commit fix
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add src/Bluetooth.cpp
+          git diff --cached --check
+          git commit -m "Stop Bluetooth discovery after reconnect"
+          git push origin HEAD:improve-bluetooth-status

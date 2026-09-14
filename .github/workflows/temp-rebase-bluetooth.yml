@@ -1,0 +1,41 @@
+name: TEMP rebase bluetooth branch
+
+on:
+  push:
+    branches:
+      - rebase-improve-bluetooth-status-temp
+
+permissions:
+  contents: write
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Rebase feature branch onto upstream dev
+        shell: bash
+        run: |
+          set -uo pipefail
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git remote add upstream https://github.com/biologist79/ESPuino.git
+          git fetch upstream dev
+          git fetch origin improve-bluetooth-status
+          git checkout -B rebase-result-temp origin/improve-bluetooth-status
+
+          if git rebase upstream/dev; then
+            git push origin HEAD:refs/heads/rebase-result-temp --force
+            exit 0
+          fi
+
+          echo "=== REBASE FAILED ==="
+          git status --short
+          echo "=== UNMERGED FILES ==="
+          git diff --name-only --diff-filter=U
+          echo "=== CONFLICT DIFF ==="
+          git diff --cc || true
+          exit 1

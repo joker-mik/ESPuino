@@ -1,0 +1,28 @@
+name: TEMP merge upstream dev
+
+on:
+  push:
+    branches:
+      - sync-upstream-dev-temp
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v5
+        with:
+          ref: improve-bluetooth-status
+          fetch-depth: 0
+
+      - name: Merge current upstream dev
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git remote add upstream https://github.com/biologist79/ESPuino.git || true
+          git fetch upstream dev
+          git merge --no-ff upstream/dev -m "Merge upstream dev into improve-bluetooth-status"
+          git push origin HEAD:improve-bluetooth-status

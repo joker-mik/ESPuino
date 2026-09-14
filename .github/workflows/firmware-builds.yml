@@ -57,10 +57,9 @@ jobs:
 
       - name: Install PlatformIO Core
         run: |
-          pip install -U setuptools "platformio==6.1.18"
-          # Pin to the PlatformIO Core version used by the last successful firmware build.
-          # Newer PlatformIO/SCons combinations currently fail at link time with
-          # ModuleNotFoundError: SCons.Tool.FortranCommon.
+          pip install -U setuptools "platformio==6.1.19"
+          # 6.1.19 is the minimum supported by the current pioarduino ESP32 platform.
+          # PlatformIO 6.2.0 currently fails at link time with SCons.Tool.FortranCommon missing.
           pio pkg update --global
           mkdir binaries
 

@@ -18,11 +18,20 @@ jobs:
           ref: improve-bluetooth-status
           fetch-depth: 0
 
-      - name: Merge current upstream dev
+      - name: Inspect upstream merge conflict
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git remote add upstream https://github.com/biologist79/ESPuino.git || true
           git fetch upstream dev
+          set +e
           git merge --no-ff upstream/dev -m "Merge upstream dev into improve-bluetooth-status"
-          git push origin HEAD:improve-bluetooth-status
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "=== UNMERGED FILES ==="
+            git diff --name-only --diff-filter=U
+            echo "=== CONFLICT MARKERS ==="
+            grep -n -B 20 -A 40 -E '^(<<<<<<<|=======|>>>>>>>)' html/management.html || true
+            exit 1
+          fi

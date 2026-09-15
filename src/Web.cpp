@@ -796,6 +796,7 @@ WebsocketCodeType JSONToSettings(JsonObject doc) {
 		success = success && (gPrefsSettings.putBool("dAccRfidTwice", generalObj["dontAcceptRfidTwice"].as<bool>()) != 0);
 		success = success && (gPrefsSettings.putBool("p2pSameRfid", generalObj["resumeOnSameRfid"].as<bool>()) != 0);
 		success = success && (gPrefsSettings.putBool("pauseOnMinVol", generalObj["pauseOnMinVol"].as<bool>()) != 0);
+		success = success && (gPrefsSettings.putBool("nightVolLimit", generalObj["nightVolLimit"].as<bool>()) != 0);
 		success = success && (gPrefsSettings.putBool("recoverVolBoot", generalObj["recoverVolBoot"].as<bool>()) != 0);
 		success = success && (gPrefsSettings.putUChar("volumeCurve", generalObj["volumeCurve"].as<uint8_t>()) != 0);
 		success = success && (gPrefsRfid.putUChar("rfidReaderType", generalObj["rfidReaderType"].as<uint8_t>()) != 0);
@@ -849,6 +850,9 @@ WebsocketCodeType JSONToSettings(JsonObject doc) {
 
 		// Apply the new maximum-volume limits immediately; no reboot is required.
 		AudioPlayer_ApplyMaxVolumes(maxVolumeSp, maxVolumeHp);
+		// Takes effect the next time night mode is switched on; an already running night mode keeps the
+		// ceiling it was armed with (or none), so the setting never changes the limit under way.
+		AudioPlayer_SetNightVolumeLimitEnabled(generalObj["nightVolLimit"].as<bool>());
 
 		gPlayProperties.newPlayMono = generalObj["playMono"].as<bool>();
 		gPlayProperties.SavePlayPosRfidChange = generalObj["savePosRfidChge"].as<bool>();
@@ -904,6 +908,7 @@ WebsocketCodeType JSONToSettings(JsonObject doc) {
 		success = success && (gPrefsSettings.putUChar("numControl", ledObj["numControl"].as<uint8_t>()) != 0);
 		success = success && (gPrefsSettings.putUChar("numIdleDots", ledObj["numIdleDots"].as<uint8_t>()) != 0);
 		success = success && (gPrefsSettings.putBool("offsetPause", ledObj["offsetPause"].as<bool>()) != 0);
+		success = success && (gPrefsSettings.putBool("ledRfidFlash", ledObj["rfidFlash"].as<bool>()) != 0);
 		success = success && (gPrefsSettings.putShort("hueStart", ledObj["hueStart"].as<int16_t>()) != 0);
 		success = success && (gPrefsSettings.putShort("hueEnd", ledObj["hueEnd"].as<int16_t>()) != 0);
 		success = success && (gPrefsSettings.putShort("hueAtmo", ledObj["hueAtmo"].as<int16_t>()) != 0);
@@ -1239,6 +1244,7 @@ static void settingsToJSON(JsonObject obj, const String section) {
 		const String slixPasswordHex = slixPrivacyPasswordToHex(slixPrivacyPasswordFromPrefs());
 		generalObj["slixPrivacyPassword"].set(slixPasswordHex);
 		generalObj["pauseOnMinVol"].set(gPrefsSettings.getBool("pauseOnMinVol", false)); // PAUSE_ON_MIN_VOLUME
+		generalObj["nightVolLimit"].set(gPrefsSettings.getBool("nightVolLimit", false)); // NIGHT_MODE_VOLUME_LIMIT
 		generalObj["recoverVolBoot"].set(gPrefsSettings.getBool("recoverVolBoot", false)); // USE_LAST_VOLUME_AFTER_REBOOT
 		generalObj["volumeCurve"].set(gPrefsSettings.getUChar("volumeCurve", 0)); // VOLUMECURVE
 	}
@@ -1310,6 +1316,7 @@ static void settingsToJSON(JsonObject obj, const String section) {
 		}
 		ledObj["numIdleDots"].set(gPrefsSettings.getUChar("numIdleDots", 4)); // NUM_LEDS_IDLE_DOTS
 		ledObj["offsetPause"].set(gPrefsSettings.getBool("offsetPause", false)); // OFFSET_PAUSE_LEDS
+		ledObj["rfidFlash"].set(gPrefsSettings.getBool("ledRfidFlash", false)); // LED_FLASH_ON_RFID
 		ledObj["hueStart"].set(gPrefsSettings.getShort("hueStart", 85)); // PROGRESS_HUE_START
 		ledObj["hueEnd"].set(gPrefsSettings.getShort("hueEnd", -1)); // PROGRESS_HUE_END
 		ledObj["hueAtmo"].set(gPrefsSettings.getShort("hueAtmo", 10)); // ATMO_HUE
@@ -1406,6 +1413,7 @@ static void settingsToJSON(JsonObject obj, const String section) {
 		genSettings["dontAcceptRfidTwice"].set(false); // DONT_ACCEPT_SAME_RFID_TWICE
 		genSettings["resumeOnSameRfid"].set(false); // RESUME_ON_SAME_RFID
 		genSettings["pauseOnMinVol"].set(false); // PAUSE_ON_MIN_VOLUME
+		genSettings["nightVolLimit"].set(false); // NIGHT_MODE_VOLUME_LIMIT
 		genSettings["recoverVolBoot"].set(false); // USE_LAST_VOLUME_AFTER_REBOOT
 		genSettings["volumeCurve"].set(0u); // VOLUME_CURVE
 		genSettings["rfidReaderType"].set(0u); // RFID_READER_TYPE_RUNTIME (auto-detect)
@@ -1427,6 +1435,7 @@ static void settingsToJSON(JsonObject obj, const String section) {
 		ledSettings["numControl"].set(0u); // NUM_CONTROL_LEDS
 		ledSettings["numIdleDots"].set(4u); // NUM_LEDS_IDLE_DOTS
 		ledSettings["offsetPause"].set(false); // OFFSET_PAUSE_LEDS
+		ledSettings["rfidFlash"].set(false); // LED_FLASH_ON_RFID
 		ledSettings["hueStart"].set(85); // PROGRESS_HUE_START
 		ledSettings["hueEnd"].set(-1); // PROGRESS_HUE_END
 		ledSettings["hueAtmo"].set(10); // ATMO_HUE

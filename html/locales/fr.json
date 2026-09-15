@@ -65,7 +65,9 @@
 			"dimmablestatesExp": "Nombre d'étapes intermédiaires par LED, utilisées pour rendre les transitions (par ex. volume ou progression) plus douces/fines.",
 			"offsetExp": "Décale la première LED de l'indicateur de ce nombre de positions - utile si l'anneau LED ne doit pas commencer à la position 0.",
 			"offsetpauseExp": "Décale l'indicateur de pause d'un demi-espacement de LED par rapport à l'indicateur de repos normal, afin de distinguer visuellement la pause du repos.",
-			"reverserotationExp": "Inverse le sens de défilement de l'indicateur LED, par ex. pour les anneaux montés dans le sens antihoraire au lieu du sens horaire."
+			"reverserotationExp": "Inverse le sens de défilement de l'indicateur LED, par ex. pour les anneaux montés dans le sens antihoraire au lieu du sens horaire.",
+			"rfidflash": "Bref clignotement de toutes les LED à la reconnaissance d'une carte",
+			"rfidflashExp": "Accuse réception d'une carte RFID assignée par un bref clignotement vert – tu vois ainsi que la carte a été acceptée. Une carte inconnue reste signalée en rouge."
 		},
 		"buttons": {
 			"title": "Attribution des boutons",
@@ -563,6 +565,8 @@
 			"playLastRfidOnRebootExp": "La dernière balise RFID lue est lue après le redémarrage.",
 			"pauseOnMinVolume": "Pause au volume minimal",
 			"pauseOnMinVolumeExp": "La lecture est mise en pause lorsque le volume atteint le minimum. Plus d'infos <a href='https://forum.espuino.de/t/lautstaerke-0-pause/1631' target='_blank'>ici</a>.",
+			"nightVolumeLimit": "Limiter le volume en mode nuit",
+			"nightVolumeLimitExp": "À l'activation du mode nuit, le volume réglé à ce moment devient une limite supérieure temporaire (plus un cran de marge) – pratique lorsque l'ESPuino est emporté au lit. La limite est levée à la sortie du mode nuit.",
 			"recoverVolBoot": "Utiliser le dernier volume au redémarrage",
 			"recoverVolBootExp": "Le boîtier se souvient, après un redémarrage, du dernier volume utilisé et le rétablit automatiquement.",
 			"volumeCurve": "Des nuances plus fines à faible volume",

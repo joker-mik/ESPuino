@@ -65,7 +65,9 @@
 			"dimmablestatesExp": "Anzahl der Zwischenschritte pro LED, mit denen Übergänge (z.B. Lautstärke- oder Fortschrittsanzeige) feiner/weicher dargestellt werden.",
 			"offsetExp": "Verschiebt die erste LED der Anzeige um die angegebene Anzahl Positionen - nützlich, wenn der LED-Ring nicht bei Position 0 beginnen soll.",
 			"offsetpauseExp": "Versetzt die Pause-Anzeige um einen halben LED-Abstand gegenüber der normalen Ruhezustand-Anzeige, damit Pause optisch von Idle unterscheidbar ist.",
-			"reverserotationExp": "Kehrt die Laufrichtung der LED-Anzeige um, z.B. für Ringe, die gegen den Uhrzeigersinn statt im Uhrzeigersinn montiert sind."
+			"reverserotationExp": "Kehrt die Laufrichtung der LED-Anzeige um, z.B. für Ringe, die gegen den Uhrzeigersinn statt im Uhrzeigersinn montiert sind.",
+			"rfidflash": "Kurzes Aufleuchten aller LEDs bei erkannter Karte",
+			"rfidflashExp": "Quittiert eine zugewiesene RFID-Karte mit einem kurzen grünen Aufleuchten – so siehst du, dass die Karte angenommen wurde. Eine unbekannte Karte wird weiterhin rot quittiert."
 		},
 		"buttons": {
 			"title": "Taster-Zuordnungen",
@@ -563,6 +565,8 @@
 			"playLastRfidOnRebootExp": "Letzten RFID-Tag nach Neustart wieder abspielen.",
 			"pauseOnMinVolume": "Pause bei minimaler Lautstärke",
 			"pauseOnMinVolumeExp": "Die Wiedergabe wird pausiert, wenn die Lautstärke das Minimum erreicht. Mehr Infos <a href='https://forum.espuino.de/t/lautstaerke-0-pause/1631' target='_blank'>hier</a>.",
+			"nightVolumeLimit": "Lautstärke im Nachtmodus begrenzen",
+			"nightVolumeLimitExp": "Beim Einschalten des Nachtmodus wird die gerade eingestellte Lautstärke zur vorübergehenden Obergrenze (plus eine Stufe Spielraum) – praktisch, wenn ESPuino mit ins Bett genommen wird. Beim Verlassen des Nachtmodus wird die Begrenzung wieder aufgehoben.",
 			"recoverVolBoot": "Letzte Lautstärke bei Neustart verwenden",
 			"recoverVolBootExp": "Die Box erinnert sich über einen Neustart hinweg, welche Lautstärke zuletzt verwendet wurde und stellt diese automatisch wieder ein.",
 			"volumeCurve": "Feinere Abstufungen bei niedriger Lautstärke",

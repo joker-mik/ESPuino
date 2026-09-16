@@ -30,7 +30,16 @@ void Bluetooth_PreviousTrack(void);
 void Bluetooth_SetVolume(const int32_t _newVolume);
 uint8_t Bluetooth_GetCurrentVolume();
 
+struct BluetoothSourceBufferStats {
+	bool allocated;
+	size_t capacity;
+	size_t bytesWaiting;
+	uint32_t underruns;
+	uint32_t sendFailures;
+};
+
 bool Bluetooth_Source_SendAudioData(const int16_t *outBuff, int16_t validSamples);
+BluetoothSourceBufferStats Bluetooth_GetSourceBufferStats();
 bool Bluetooth_Device_Connected();
 
 #ifdef BLUETOOTH_ENABLE

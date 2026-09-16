@@ -576,6 +576,25 @@ void webserverStart(void) {
 			response->println("Largest PSRAM block: " + String(ESP.getMaxAllocPsram()));
 			response->println("</pre></div><br>");
 
+#ifdef BLUETOOTH_ENABLE
+			const BluetoothSourceBufferStats btBufferStats = Bluetooth_GetSourceBufferStats();
+			const size_t btBufferFree = (btBufferStats.capacity > btBufferStats.bytesWaiting)
+				? btBufferStats.capacity - btBufferStats.bytesWaiting
+				: 0;
+			const float btBufferFillPercent = btBufferStats.capacity > 0
+				? (100.0f * static_cast<float>(btBufferStats.bytesWaiting) / static_cast<float>(btBufferStats.capacity))
+				: 0.0f;
+			response->println("Bluetooth source ringbuffer:<div class='text'><pre>");
+			response->println("Allocated:           " + String(btBufferStats.allocated ? "yes" : "no"));
+			response->println("Capacity:            " + String(static_cast<uint32_t>(btBufferStats.capacity)));
+			response->println("Used:                " + String(static_cast<uint32_t>(btBufferStats.bytesWaiting)));
+			response->println("Free:                " + String(static_cast<uint32_t>(btBufferFree)));
+			response->println("Fill:                " + String(btBufferFillPercent, 1) + "%");
+			response->println("Underruns:           " + String(btBufferStats.underruns));
+			response->println("Send failures:       " + String(btBufferStats.sendFailures));
+			response->println("</pre></div><br>");
+#endif
+
 			uint32_t taskCount = uxTaskGetNumberOfTasks();
 			size_t bufferSize = (taskCount + 10) * 80; // Provide safer margin for vTaskList
 			char *pbuffer = (char *) x_calloc(bufferSize, 1);

@@ -47,6 +47,8 @@ static char pendingConnectName[ESP_BT_GAP_MAX_BDNAME_LEN + 1] = {0};
 static std::atomic<bool> pendingConnect = false;
 static portMUX_TYPE pendingConnectMux = portMUX_INITIALIZER_UNLOCKED;
 RingbufHandle_t audioSourceRingBuffer;
+static std::atomic<uint32_t> audioSourceUnderruns = 0;
+static std::atomic<uint32_t> audioSourceSendFailures = 0;
 static std::atomic<bool> bluetoothSourceConnected = false;
 String btDeviceName;
 static portMUX_TYPE scannedDevicesMux = portMUX_INITIALIZER_UNLOCKED;
@@ -598,7 +600,11 @@ void avrc_metadata_callback(uint8_t id, const uint8_t *text) {
 
 #ifdef BLUETOOTH_ENABLE
 int32_t get_data_channels(Frame *frame, int32_t channel_len) {
-	if (channel_len <= 0 || frame == NULL || audioSourceRingBuffer == NULL) {
+	if (channel_len <= 0 || frame == NULL) {
+		return 0;
+	}
+	if (audioSourceRingBuffer == NULL) {
+		audioSourceUnderruns.fetch_add(1, std::memory_order_relaxed);
 		return 0;
 	}
 
@@ -613,6 +619,7 @@ int32_t get_data_channels(Frame *frame, int32_t channel_len) {
 	vRingbufferGetInfo(audioSourceRingBuffer, NULL, NULL, NULL, NULL, &bytes_waiting);
 
 	if (bytes_waiting < bytes_needed) {
+		audioSourceUnderruns.fetch_add(1, std::memory_order_relaxed);
 		memset(frame, 0, channel_len * sizeof(Frame));
 		return channel_len;
 	}
@@ -655,6 +662,7 @@ int32_t get_data_channels(Frame *frame, int32_t channel_len) {
 	}
 
 	if (samples_received < channel_len) {
+		audioSourceUnderruns.fetch_add(1, std::memory_order_relaxed);
 		memset(&frame[samples_received], 0, (channel_len - samples_received) * sizeof(Frame));
 	}
 
@@ -1044,6 +1052,8 @@ void Bluetooth_Init(void) {
 		a2dp_sink->set_on_volumechange(Bluetooth_VolumeChanged);
 	} else if (System_GetOperationMode() == OPMODE_BLUETOOTH_SOURCE) {
 		audioSourceRingBuffer = nullptr;
+		audioSourceUnderruns.store(0, std::memory_order_relaxed);
+		audioSourceSendFailures.store(0, std::memory_order_relaxed);
 
 		a2dp_source = new BluetoothA2DPSource();
 		if (!a2dp_source) {
@@ -1310,13 +1320,31 @@ bool Bluetooth_Source_SendAudioData(const int16_t *outBuff, int16_t validSamples
 		}
 
 		const TickType_t sendTimeout = pdMS_TO_TICKS(50); // Reduced timeout for non-blocking feel
-		return (pdTRUE == xRingbufferSend(audioSourceRingBuffer, outBuff, validSamples * sizeof(int16_t), sendTimeout));
+		const bool sent = (pdTRUE == xRingbufferSend(audioSourceRingBuffer, outBuff, validSamples * sizeof(int16_t), sendTimeout));
+		if (!sent) {
+			audioSourceSendFailures.fetch_add(1, std::memory_order_relaxed);
+		}
+		return sent;
 	} else {
 		return false;
 	}
 #else
 	return false;
 #endif
+}
+
+BluetoothSourceBufferStats Bluetooth_GetSourceBufferStats() {
+	BluetoothSourceBufferStats stats = {};
+#ifdef BLUETOOTH_ENABLE
+	stats.capacity = AUDIO_SOURCE_RINGBUFFER_SIZE;
+	stats.underruns = audioSourceUnderruns.load(std::memory_order_relaxed);
+	stats.sendFailures = audioSourceSendFailures.load(std::memory_order_relaxed);
+	if (audioSourceRingBuffer != nullptr) {
+		stats.allocated = true;
+		vRingbufferGetInfo(audioSourceRingBuffer, NULL, NULL, NULL, NULL, &stats.bytesWaiting);
+	}
+#endif
+	return stats;
 }
 
 bool Bluetooth_Device_Connected() {

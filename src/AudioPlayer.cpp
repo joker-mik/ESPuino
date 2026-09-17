@@ -1022,6 +1022,7 @@ void AudioPlayer_Loop() {
 						audio->stopSong();
 						Led_Indicate(LedIndicatorType::Rewind);
 						String pathToTrack = gFSystem.rawPath(gPlayProperties.playlist->at(gPlayProperties.currentTrackNumber));
+						Bluetooth_Source_ResetDiagnostics();
 						audioReturnCode = audio->connecttoFS(gFSystem, pathToTrack.c_str());
 						// consider track as finished, when audio lib call was not successful
 						if (!audioReturnCode) {
@@ -1205,6 +1206,7 @@ void AudioPlayer_Loop() {
 					gPlayProperties.startAtFilePos = 0;
 				}
 				String pathToTrack = gFSystem.rawPath(gPlayProperties.playlist->at(gPlayProperties.currentTrackNumber));
+				Bluetooth_Source_ResetDiagnostics();
 				audioReturnCode
 					= audio->connecttoFS(gFSystem, pathToTrack.c_str(), fileStartTime);
 				// consider track as finished, when audio lib call was not successful

@@ -590,8 +590,17 @@ void webserverStart(void) {
 			response->println("Used:                " + String(static_cast<uint32_t>(btBufferStats.bytesWaiting)));
 			response->println("Free:                " + String(static_cast<uint32_t>(btBufferFree)));
 			response->println("Fill:                " + String(btBufferFillPercent, 1) + "%");
+			response->println("Min used:            " + String(btBufferStats.minBytesWaiting));
+			response->println("Max used:            " + String(btBufferStats.maxBytesWaiting));
+			response->println("Average used (EMA):  " + String(btBufferStats.averageBytesWaiting));
 			response->println("Underruns:           " + String(btBufferStats.underruns));
 			response->println("Send failures:       " + String(btBufferStats.sendFailures));
+			response->println("Bytes written:       " + String(btBufferStats.bytesWritten));
+			response->println("Bytes read:          " + String(btBufferStats.bytesRead));
+			response->println("Producer B/s:        " + String(btBufferStats.producerBytesPerSecond));
+			response->println("Consumer B/s:        " + String(btBufferStats.consumerBytesPerSecond));
+			response->println("Last producer ms:    " + String(btBufferStats.lastProducerMsAgo));
+			response->println("Last consumer ms:    " + String(btBufferStats.lastConsumerMsAgo));
 			response->println("</pre></div><br>");
 #endif
 

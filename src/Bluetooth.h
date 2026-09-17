@@ -34,11 +34,21 @@ struct BluetoothSourceBufferStats {
 	bool allocated;
 	size_t capacity;
 	size_t bytesWaiting;
+	uint32_t minBytesWaiting;
+	uint32_t maxBytesWaiting;
+	uint32_t averageBytesWaiting;
 	uint32_t underruns;
 	uint32_t sendFailures;
+	uint32_t bytesWritten;
+	uint32_t bytesRead;
+	uint32_t producerBytesPerSecond;
+	uint32_t consumerBytesPerSecond;
+	uint32_t lastProducerMsAgo;
+	uint32_t lastConsumerMsAgo;
 };
 
 bool Bluetooth_Source_SendAudioData(const int16_t *outBuff, int16_t validSamples);
+void Bluetooth_Source_ResetDiagnostics();
 BluetoothSourceBufferStats Bluetooth_GetSourceBufferStats();
 bool Bluetooth_Device_Connected();
 

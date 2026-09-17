@@ -49,10 +49,6 @@ static portMUX_TYPE pendingConnectMux = portMUX_INITIALIZER_UNLOCKED;
 RingbufHandle_t audioSourceRingBuffer;
 static std::atomic<uint32_t> audioSourceUnderruns = 0;
 static std::atomic<uint32_t> audioSourceSendFailures = 0;
-static std::atomic<uint32_t> audioSourceCurrentFill = 0;
-static std::atomic<uint32_t> audioSourceMinFill = 0;
-static std::atomic<uint32_t> audioSourceMaxFill = 0;
-static std::atomic<uint32_t> audioSourceAverageFill = 0;
 static std::atomic<uint32_t> audioSourceBytesWritten = 0;
 static std::atomic<uint32_t> audioSourceBytesRead = 0;
 static std::atomic<uint32_t> audioSourceStatsStartMs = 0;
@@ -181,20 +177,6 @@ const char *getType() {
 #endif
 
 #ifdef BLUETOOTH_ENABLE
-static void Bluetooth_Source_RecordFill(uint32_t fill) {
-	const uint32_t minFill = audioSourceMinFill.load(std::memory_order_relaxed);
-	if (fill < minFill) {
-		audioSourceMinFill.store(fill, std::memory_order_relaxed);
-	}
-	const uint32_t maxFill = audioSourceMaxFill.load(std::memory_order_relaxed);
-	if (fill > maxFill) {
-		audioSourceMaxFill.store(fill, std::memory_order_relaxed);
-	}
-	const uint32_t avg = audioSourceAverageFill.load(std::memory_order_relaxed);
-	const int32_t delta = static_cast<int32_t>(fill) - static_cast<int32_t>(avg);
-	audioSourceAverageFill.store(static_cast<uint32_t>(static_cast<int32_t>(avg) + delta / 8), std::memory_order_relaxed);
-}
-
 static void Bluetooth_Source_FlushRingbuffer(void) {
 	if (!audioSourceRingBuffer) {
 		return;
@@ -204,21 +186,15 @@ static void Bluetooth_Source_FlushRingbuffer(void) {
 	while ((item = static_cast<uint8_t *>(xRingbufferReceiveUpTo(audioSourceRingBuffer, &bytesRead, 0, SIZE_MAX))) != nullptr) {
 		vRingbufferReturnItem(audioSourceRingBuffer, item);
 	}
-	audioSourceCurrentFill.store(0, std::memory_order_relaxed);
-	Bluetooth_Source_RecordFill(0);
 }
 #endif
 
 void Bluetooth_Source_ResetDiagnostics() {
 #ifdef BLUETOOTH_ENABLE
-	const uint32_t currentFill = audioSourceCurrentFill.load(std::memory_order_relaxed);
 	audioSourceUnderruns.store(0, std::memory_order_relaxed);
 	audioSourceSendFailures.store(0, std::memory_order_relaxed);
 	audioSourceBytesWritten.store(0, std::memory_order_relaxed);
 	audioSourceBytesRead.store(0, std::memory_order_relaxed);
-	audioSourceMinFill.store(currentFill, std::memory_order_relaxed);
-	audioSourceMaxFill.store(currentFill, std::memory_order_relaxed);
-	audioSourceAverageFill.store(currentFill, std::memory_order_relaxed);
 	const uint32_t now = millis();
 	audioSourceStatsStartMs.store(now, std::memory_order_relaxed);
 	audioSourceLastProducerMs.store(0, std::memory_order_relaxed);
@@ -642,78 +618,51 @@ void avrc_metadata_callback(uint8_t id, const uint8_t *text) {
 
 #ifdef BLUETOOTH_ENABLE
 int32_t get_data_channels(Frame *frame, int32_t channel_len) {
-	if (channel_len <= 0 || frame == NULL) {
+	if (channel_len <= 0 || frame == nullptr) {
 		return 0;
 	}
-	if (audioSourceRingBuffer == NULL) {
+	if (audioSourceRingBuffer == nullptr) {
 		audioSourceUnderruns.fetch_add(1, std::memory_order_relaxed);
-		return 0;
-	}
-
-	const size_t bytes_per_frame = 2 * sizeof(int16_t); // ch1 + ch2, 16-bit each
-	const size_t bytes_needed = (size_t) channel_len * bytes_per_frame;
-
-	// --- Gate on actual data available, before touching the buffer ---
-	// uxItemsWaiting is the number of bytes currently queued for a
-	// no-split ring buffer. If there isn't a full frame's worth sitting
-	// there, bail out to silence instead of blocking / partially filling.
-	size_t bytes_waiting = 0;
-	vRingbufferGetInfo(audioSourceRingBuffer, NULL, NULL, NULL, NULL, &bytes_waiting);
-
-	if (bytes_waiting < bytes_needed) {
-		audioSourceUnderruns.fetch_add(1, std::memory_order_relaxed);
-		memset(frame, 0, channel_len * sizeof(Frame));
+		memset(frame, 0, static_cast<size_t>(channel_len) * sizeof(Frame));
 		return channel_len;
 	}
 
-	// --- Pull the data, handling one possible wrap-around ---
-	// A no-split buffer returns at most the contiguous run up to the
-	// physical end of the buffer. Since we've already confirmed enough
-	// total bytes are waiting, a short read here means we hit the wrap
-	// boundary, not that data is missing — read again to get the rest.
-	int32_t samples_received = 0;
-	for (int reads = 0; reads < 2 && samples_received < channel_len; ++reads) {
+	const size_t bytesPerFrame = 2 * sizeof(int16_t);
+	const size_t bytesNeeded = static_cast<size_t>(channel_len) * bytesPerFrame;
+	int32_t samplesReceived = 0;
+	uint32_t bytesReadTotal = 0;
+
+	for (int reads = 0; reads < 2 && samplesReceived < channel_len; ++reads) {
 		size_t sampleSize = 0;
-		size_t bytes_left = bytes_needed - (size_t) samples_received * bytes_per_frame;
-
-		uint8_t *sampleBuff = (uint8_t *) xRingbufferReceiveUpTo(
-			audioSourceRingBuffer,
-			&sampleSize,
-			0,
-			bytes_left);
-
-		if (sampleBuff == NULL) {
-			break; // shouldn't happen given the pre-check, but stay safe
+		const size_t bytesLeft = bytesNeeded - static_cast<size_t>(samplesReceived) * bytesPerFrame;
+		uint8_t *sampleBuff = static_cast<uint8_t *>(xRingbufferReceiveUpTo(audioSourceRingBuffer, &sampleSize, 0, bytesLeft));
+		if (sampleBuff == nullptr || sampleSize == 0) {
+			break;
 		}
 
-		int32_t chunk_samples = sampleSize / bytes_per_frame;
-		int16_t *raw_samples = (int16_t *) sampleBuff;
-
-		for (int32_t i = 0; i < chunk_samples; ++i) {
-			frame[samples_received + i].channel1 = raw_samples[i * 2];
-			frame[samples_received + i].channel2 = raw_samples[i * 2 + 1];
+		const int32_t chunkSamples = static_cast<int32_t>(sampleSize / bytesPerFrame);
+		const int16_t *rawSamples = reinterpret_cast<const int16_t *>(sampleBuff);
+		for (int32_t i = 0; i < chunkSamples; ++i) {
+			frame[samplesReceived + i].channel1 = rawSamples[i * 2];
+			frame[samplesReceived + i].channel2 = rawSamples[i * 2 + 1];
 		}
 
-		samples_received += chunk_samples;
-		audioSourceBytesRead.fetch_add(static_cast<uint32_t>(sampleSize), std::memory_order_relaxed);
-		const uint32_t currentFill = audioSourceCurrentFill.load(std::memory_order_relaxed);
-		const uint32_t newFill = currentFill > sampleSize ? currentFill - static_cast<uint32_t>(sampleSize) : 0;
-		audioSourceCurrentFill.store(newFill, std::memory_order_relaxed);
+		samplesReceived += chunkSamples;
+		bytesReadTotal += static_cast<uint32_t>(sampleSize);
+		vRingbufferReturnItem(audioSourceRingBuffer, sampleBuff);
+		if (sampleSize == bytesLeft) {
+			break;
+		}
+	}
+
+	if (bytesReadTotal > 0) {
+		audioSourceBytesRead.fetch_add(bytesReadTotal, std::memory_order_relaxed);
 		audioSourceLastConsumerMs.store(millis(), std::memory_order_relaxed);
-		Bluetooth_Source_RecordFill(newFill);
-		vRingbufferReturnItem(audioSourceRingBuffer, (void *) sampleBuff);
-
-		if (sampleSize == bytes_left) {
-			break; // got the full amount in one contiguous chunk, no wrap
-		}
-		// else: short read == we hit the wrap boundary, loop once more
 	}
-
-	if (samples_received < channel_len) {
+	if (samplesReceived < channel_len) {
 		audioSourceUnderruns.fetch_add(1, std::memory_order_relaxed);
-		memset(&frame[samples_received], 0, (channel_len - samples_received) * sizeof(Frame));
+		memset(&frame[samplesReceived], 0, static_cast<size_t>(channel_len - samplesReceived) * sizeof(Frame));
 	}
-
 	return channel_len;
 }
 #endif
@@ -1374,13 +1323,7 @@ bool Bluetooth_Source_SendAudioData(const int16_t *outBuff, int16_t validSamples
 		} else {
 			const uint32_t bytes = static_cast<uint32_t>(validSamples) * sizeof(int16_t);
 			audioSourceBytesWritten.fetch_add(bytes, std::memory_order_relaxed);
-			uint32_t newFill = audioSourceCurrentFill.fetch_add(bytes, std::memory_order_relaxed) + bytes;
-			if (newFill > AUDIO_SOURCE_RINGBUFFER_SIZE) {
-				newFill = AUDIO_SOURCE_RINGBUFFER_SIZE;
-				audioSourceCurrentFill.store(newFill, std::memory_order_relaxed);
-			}
 			audioSourceLastProducerMs.store(millis(), std::memory_order_relaxed);
-			Bluetooth_Source_RecordFill(newFill);
 		}
 		return sent;
 	} else {
@@ -1395,10 +1338,13 @@ BluetoothSourceBufferStats Bluetooth_GetSourceBufferStats() {
 	BluetoothSourceBufferStats stats = {};
 #ifdef BLUETOOTH_ENABLE
 	stats.capacity = AUDIO_SOURCE_RINGBUFFER_SIZE;
-	stats.bytesWaiting = audioSourceCurrentFill.load(std::memory_order_relaxed);
-	stats.minBytesWaiting = audioSourceMinFill.load(std::memory_order_relaxed);
-	stats.maxBytesWaiting = audioSourceMaxFill.load(std::memory_order_relaxed);
-	stats.averageBytesWaiting = audioSourceAverageFill.load(std::memory_order_relaxed);
+	if (audioSourceRingBuffer != nullptr) {
+		stats.allocated = true;
+		vRingbufferGetInfo(audioSourceRingBuffer, nullptr, nullptr, nullptr, nullptr, &stats.bytesWaiting);
+	}
+	stats.minBytesWaiting = stats.bytesWaiting;
+	stats.maxBytesWaiting = stats.bytesWaiting;
+	stats.averageBytesWaiting = stats.bytesWaiting;
 	stats.underruns = audioSourceUnderruns.load(std::memory_order_relaxed);
 	stats.sendFailures = audioSourceSendFailures.load(std::memory_order_relaxed);
 	stats.bytesWritten = audioSourceBytesWritten.load(std::memory_order_relaxed);
@@ -1414,9 +1360,6 @@ BluetoothSourceBufferStats Bluetooth_GetSourceBufferStats() {
 	const uint32_t lastConsumer = audioSourceLastConsumerMs.load(std::memory_order_relaxed);
 	stats.lastProducerMsAgo = lastProducer > 0 ? now - lastProducer : 0;
 	stats.lastConsumerMsAgo = lastConsumer > 0 ? now - lastConsumer : 0;
-	if (audioSourceRingBuffer != nullptr) {
-		stats.allocated = true;
-	}
 #endif
 	return stats;
 }

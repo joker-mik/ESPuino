@@ -92,6 +92,7 @@ static void handleGetWiFiConfig(AsyncWebServerRequest *request);
 static void handlePostWiFiConfig(AsyncWebServerRequest *request, JsonVariant &json);
 static void handleCoverImageRequest(AsyncWebServerRequest *request);
 static void handleBluetoothScanRequest(AsyncWebServerRequest *request);
+static void handleBluetoothStatusRequest(AsyncWebServerRequest *request);
 static void handleBluetoothResultsRequest(AsyncWebServerRequest *request);
 static void handleBluetoothConnectRequest(AsyncWebServerRequest *request, JsonVariant &json);
 static void handleWiFiScanRequest(AsyncWebServerRequest *request);
@@ -672,6 +673,7 @@ void webserverStart(void) {
 		// Bluetooth-Scan and connect
 		wServer.on("/bluetoothscan", HTTP_GET, handleBluetoothScanRequest);
 		wServer.on("/bluetoothresults", HTTP_GET, handleBluetoothResultsRequest);
+		wServer.on("/bluetoothstatus", HTTP_GET, handleBluetoothStatusRequest);
 		wServer.addHandler(new AsyncCallbackJsonWebHandler("/bluetoothconnect", handleBluetoothConnectRequest));
 
 		// ESPuino logo: user-provided SD override takes precedence, otherwise fall back to the default
@@ -1029,6 +1031,12 @@ WebsocketCodeType JSONToSettings(JsonObject doc) {
 			Log_Printf(LOGLEVEL_ERROR, webSaveSettingsError, "battery");
 			return WebsocketCodeType::Error;
 		}
+		// Kept out of the "== 0 means failure" chain above: putString() returns strlen(), so clearing the
+		// path to "" would be misread as an error even though the write succeeded.
+		gPrefsSettings.putBool("batWarnSound", doc["battery"]["warnSound"].as<bool>());
+		gPrefsSettings.putBool("batWarnOnce", doc["battery"]["warnSoundOnce"].as<bool>());
+		const char *warnSoundFile = doc["battery"]["warnSoundFile"].as<const char *>();
+		gPrefsSettings.putString("batWarnFile", warnSoundFile ? warnSoundFile : "");
 		Battery_Init();
 	}
 	if (doc["playlist"].is<JsonObject>()) {
@@ -1410,6 +1418,9 @@ static void settingsToJSON(JsonObject obj, const String section) {
 		batteryObj["criticalVoltage"].set(gPrefsSettings.getFloat("wCritVoltage", s_warningCriticalVoltage));
 		batteryObj["offsetVoltage"].set(gPrefsSettings.getFloat("offsetVoltage", s_offsetVoltage));
 		batteryObj["shutdownOnCritical"].set(gPrefsSettings.getBool("shutdownBatCrit", false)); // SHUTDOWN_ON_BAT_CRITICAL
+		batteryObj["warnSound"].set(gPrefsSettings.getBool("batWarnSound", false)); // spoken low-battery warning
+		batteryObj["warnSoundOnce"].set(gPrefsSettings.getBool("batWarnOnce", false));
+		batteryObj["warnSoundFile"].set(gPrefsSettings.getString("batWarnFile", ""));
 	#endif
 
 		batteryObj["voltageCheckInterval"].set(gPrefsSettings.getUInt("vCheckIntv", s_batteryCheckInterval));
@@ -1524,6 +1535,9 @@ static void settingsToJSON(JsonObject obj, const String section) {
 		batSettings["indicatorHi"].set(s_voltageIndicatorHigh);
 		batSettings["criticalVoltage"].set(s_warningCriticalVoltage);
 		batSettings["shutdownOnCritical"].set(false); // SHUTDOWN_ON_BAT_CRITICAL
+		batSettings["warnSound"].set(false);
+		batSettings["warnSoundOnce"].set(false);
+		batSettings["warnSoundFile"].set("");
 	#endif
 		batSettings["voltageCheckInterval"].set(s_batteryCheckInterval);
 #endif
@@ -3133,6 +3147,35 @@ static void handleCoverImageRequest(AsyncWebServerRequest *request) {
 	});
 	response->addHeader("Cache-Control", "no-cache, must-revalidate");
 	request->send(response);
+}
+
+// Returns the current Bluetooth headphone connection state.
+// This is intentionally a normal HTTP endpoint so opening/reloading the web UI
+// does not depend on having witnessed the A2DP connection event via websocket.
+static void handleBluetoothStatusRequest(AsyncWebServerRequest *request) {
+#ifdef BLUETOOTH_ENABLE
+	AsyncJsonResponse *response = new AsyncJsonResponse(false);
+	JsonObject object = response->getRoot();
+
+	String name;
+	String address;
+	const bool connected = Bluetooth_GetConnectedSourceInfo(name, address);
+	object["connected"] = connected;
+
+	if (connected) {
+		if (address.length() > 0) {
+			object["address"] = address;
+		}
+		if (name.length() > 0) {
+			object["name"] = name;
+		}
+	}
+
+	response->setLength();
+	request->send(response);
+#else
+	request->send(200, "application/json", "{\"connected\":false}");
+#endif
 }
 
 // Handles Bluetooth scan requests

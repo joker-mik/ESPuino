@@ -59,6 +59,7 @@ jobs:
         with:
           name: firmware-${{ matrix.variant }}-RC522-noBT.bin
           path: .pio/build/${{ matrix.variant }}/firmware.bin
+          retention-days: 1
       - name: Activate BT
         run: |
           sed -i 's/\/\/#define BLUETOOTH_ENABLE/#define BLUETOOTH_ENABLE/' src/settings.h
@@ -69,6 +70,7 @@ jobs:
         with:
           name: firmware-${{ matrix.variant }}-RC522-BT.bin
           path: .pio/build/${{ matrix.variant }}/firmware.bin
+          retention-days: 1
       - name: Change RFID type
         run: |
           sed -i 's/\/\/#define RFID_READER_TYPE_PN5180/#define RFID_READER_TYPE_PN5180/' src/settings.h
@@ -80,6 +82,7 @@ jobs:
         with:
           name: firmware-${{ matrix.variant }}-PN5180-BT.bin
           path: .pio/build/${{ matrix.variant }}/firmware.bin
+          retention-days: 1
       - name: Disable BT
         run: |
           sed -i 's/#define BLUETOOTH_ENABLE/\/\/#define BLUETOOTH_ENABLE/' src/settings.h
@@ -90,6 +93,7 @@ jobs:
         with:
           name: firmware-${{ matrix.variant }}-PN5180-noBT.bin
           path: .pio/build/${{ matrix.variant }}/firmware.bin
+          retention-days: 1
   commit:
     runs-on: ubuntu-latest
     needs: test_builds

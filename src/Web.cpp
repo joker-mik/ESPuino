@@ -1053,14 +1053,21 @@ WebsocketCodeType JSONToSettings(JsonObject doc) {
 	if (doc["mediahub"].is<JsonObject>()) {
 		MediaHub_SetAskUnknownEnabled(doc["mediahub"]["askUnknown"].as<bool>());
 		MediaHub_SetShowDirEnabled(doc["mediahub"]["showDir"].as<bool>());
-		// Saving here is also the escape hatch for the session-long skip list of
-		// unreachable hubs (see MediaHub.cpp): this is exactly where someone sits
-		// when a hub came back but the box hasn't slept since.
-		MediaHub_ClearSkippedHubs();
 	}
 	if (doc["ftp"].is<JsonObject>()) {
 		const char *_ftpUser = doc["ftp"]["username"];
 		const char *_ftpPwd = doc["ftp"]["password"];
+
+		// The web interface already limits both to the lengths published below, so this only
+		// catches requests made directly against /settings.
+		if (String(_ftpUser).length() >= ftpUserLength) {
+			Log_Printf(LOGLEVEL_ERROR, webSaveSettingsError, "ftp.username too long");
+			return WebsocketCodeType::Error;
+		}
+		if (String(_ftpPwd).length() >= ftpPasswordLength) {
+			Log_Printf(LOGLEVEL_ERROR, webSaveSettingsError, "ftp.password too long");
+			return WebsocketCodeType::Error;
+		}
 
 		gPrefsSettings.putString("ftpuser", (String) _ftpUser);
 		gPrefsSettings.putString("ftppassword", (String) _ftpPwd);
@@ -1115,6 +1122,21 @@ WebsocketCodeType JSONToSettings(JsonObject doc) {
 		}
 		if (mqttDeviceIdStr.length() >= mqttDeviceIdLength) {
 			Log_Printf(LOGLEVEL_ERROR, webSaveSettingsError, "mqtt.deviceId too long");
+			return WebsocketCodeType::Error;
+		}
+
+		// validate the remaining free-text fields. The web interface already limits them to the
+		// lengths published above, so this only catches requests made directly against /settings.
+		if (String(_mqttServer).length() >= mqttServerLength) {
+			Log_Printf(LOGLEVEL_ERROR, webSaveSettingsError, "mqtt.server too long");
+			return WebsocketCodeType::Error;
+		}
+		if (String(_mqttUser).length() >= mqttUserLength) {
+			Log_Printf(LOGLEVEL_ERROR, webSaveSettingsError, "mqtt.username too long");
+			return WebsocketCodeType::Error;
+		}
+		if (String(_mqttPwd).length() >= mqttPasswordLength) {
+			Log_Printf(LOGLEVEL_ERROR, webSaveSettingsError, "mqtt.password too long");
 			return WebsocketCodeType::Error;
 		}
 
@@ -1295,6 +1317,8 @@ static void settingsToJSON(JsonObject obj, const String section) {
 		// WiFi settings
 		JsonObject wifiObj = obj["wifi"].to<JsonObject>();
 		wifiObj["hostname"] = Wlan_GetHostname();
+		// a true maximum, so published as-is (the MQTT and FTP lengths above are published n-1)
+		wifiObj["maxHostnameLength"].set(hostnameMaxLength);
 		wifiObj["scanOnStart"].set(gPrefsSettings.getBool("ScanWiFiOnStart", false));
 		wifiObj["apSSID"] = Wlan_GetApSSID();
 		wifiObj["apPassword"] = Wlan_GetApPassword();
@@ -1554,7 +1578,7 @@ static void settingsToJSON(JsonObject obj, const String section) {
 		ftpObj["username"] = gPrefsSettings.getString("ftpuser", "-1");
 		ftpObj["password"] = gPrefsSettings.getString("ftppassword", "-1");
 		ftpObj["maxUserLength"].set(ftpUserLength - 1);
-		ftpObj["maxPwdLength"].set(ftpUserLength - 1);
+		ftpObj["maxPwdLength"].set(ftpPasswordLength - 1);
 	}
 #endif
 // MQTT
@@ -2614,6 +2638,7 @@ void handleGetWiFiConfig(AsyncWebServerRequest *request) {
 	bool scanWifiOnStart = gPrefsSettings.getBool("ScanWiFiOnStart", false);
 
 	obj["hostname"] = Wlan_GetHostname();
+	obj["maxHostnameLength"].set(hostnameMaxLength);
 	obj["scanOnStart"].set(scanWifiOnStart);
 	obj["apSSID"] = Wlan_GetApSSID();
 	obj["apPassword"] = Wlan_GetApPassword();

@@ -1,0 +1,194 @@
+name: Complete DEV RFID Play firmware
+run-name: Complete DEV - upstream synced, Bluetooth and RFID Play
+on:
+  push:
+    branches: [feature/rfid-list-play-dev]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: complete-dev-rfid-play-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  DEV_BASE: af4372de1e120d992be69e9d6db8b330f023aaa4
+  UPSTREAM_BASE: a8013b1a53e1ad3cc6ee498c7e9962eb1507687e
+  FEATURE_SOURCE: 52cc864fa6afe362e65724b047a6e260d9147dc6
+jobs:
+  source:
+    name: Verify updated dev and test minimal RFID Play port
+    if: github.ref == 'refs/heads/feature/rfid-list-play-dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify upstream synchronization before applying the feature
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$DEV_BASE" HEAD
+          git merge-base --is-ancestor "$UPSTREAM_BASE" "$DEV_BASE"
+          git diff --exit-code "$UPSTREAM_BASE" "$DEV_BASE" -- . ':(exclude).github/workflows/**'
+      - name: Apply only RFID Play to dev and run UI regression tests
+        run: |
+          set -euo pipefail
+          mkdir -p tools test review
+          python3 - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+          source = os.environ['FEATURE_SOURCE']
+          script = subprocess.check_output(['git', 'show', source + ':tools/apply_rfid_list_play.py'], text=True)
+          replacements = {
+              'ef7249f28d6ffaac4a85a3fa98db8cbc0440f512': '88ac53b9084c142c088e349d715372763ecf9300',
+              '45b4a8454288547f575333e2974ef25943d66b30': '5def397d4618358f06042db01d1990c58fdaf801',
+              '#if defined(RFID_READER_TYPE_MFRC522_SPI) || defined(RFID_READER_TYPE_MFRC522_I2C) || defined(RFID_READER_TYPE_PN5180)': '#if defined(RFID_READER_TYPE_RUNTIME)',
+          }
+          for old, new in replacements.items():
+              assert script.count(old) == 1, 'Unexpected patch source: ' + old
+              script = script.replace(old, new, 1)
+          Path('tools/apply_rfid_list_play_dev.py').write_text(script, encoding='utf-8')
+          tests = subprocess.check_output(['git', 'show', source + ':test/rfid_play_web.test.cjs'], text=True)
+          old = 'classList: {values: new Set(), add(...values) {values.forEach(v => this.values.add(v));}},'
+          new = 'classList: {values: new Set(), add(...values) {values.forEach(v => this.values.add(v));}, toggle(value, force) {const add = force === undefined ? !this.values.has(value) : !!force; if (add) this.values.add(value); else this.values.delete(value); return add;}},'
+          assert tests.count(old) == 1
+          tests = tests.replace(old, new, 1)
+          tests = tests.replace("host: 'espuino.test',", "knownMediaHubServers: [], host: 'espuino.test',", 1)
+          Path('test/rfid_play_web.test.cjs').write_text(tests, encoding='utf-8')
+          PY
+          python3 tools/apply_rfid_list_play_dev.py
+          node --test test/rfid_play_web.test.cjs | tee review/rfid-ui-tests.txt
+      - name: Prove dev features and settings are preserved
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+          base = os.environ['DEV_BASE']
+          def original(path):
+              return subprocess.check_output(['git', 'show', base + ':' + path], text=True)
+          expected = {'src/Web.cpp', 'html/management.html', 'REST-API.yaml', 'html/locales/de.json', 'html/locales/en.json', 'html/locales/fr.json', '.github/workflows/rfid-play-dev-complete.yml', 'tools/apply_rfid_list_play_dev.py', 'test/rfid_play_web.test.cjs'}
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only', base], text=True).splitlines())
+          assert changed <= expected, 'Unexpected source changes: ' + str(changed - expected)
+          for path in ('src/settings.h', 'src/settings-complete.h', 'src/RfidCommon.cpp', 'src/Bluetooth.cpp', 'platformio.ini', 'sdkconfig.defaults', 'dependencies.lock', 'custom_16mb_ota.csv', 'processHtml.py'):
+              assert Path(path).read_text() == original(path), 'Unexpected change: ' + path
+          def without_rfid_list(text):
+              start = text.index('const rfidListSavedAssignments =')
+              end = text.index('async function deleteRFID(tagId)', start)
+              return text[:start] + text[end:]
+          html = Path('html/management.html').read_text()
+          assert without_rfid_list(html) == without_rfid_list(original('html/management.html'))
+          assert 'connectionStatusIndicator' in html and 'heartbeat-pulse' in html and 'async function playRFID(' in html
+          for lang in ('de', 'en', 'fr'):
+              path = 'html/locales/' + lang + '.json'
+              current = json.loads(Path(path).read_text())
+              assert current.pop('rfidPlayback')
+              assert current == json.loads(original(path)), 'Existing translation changed: ' + lang
+          settings = Path('src/settings.h').read_text()
+          assert re.search(r'^\s*#define\s+BLUETOOTH_ENABLE\b', settings, re.M)
+          assert re.search(r'^\s*#define\s+RFID_READER_TYPE_RUNTIME\s+0\b', settings, re.M)
+          web = Path('src/Web.cpp').read_text()
+          handler = web.split('// Queue a saved card exactly like a reader event;', 1)[1].split('// handle get settings', 1)[0]
+          assert '#if defined(RFID_READER_TYPE_RUNTIME)' in handler and 'xQueueSend(gRfidCardQueue, tagId, 0)' in handler
+          assert 'AudioPlayer_SetPlaylist' not in handler and 'Rfid_Reset' not in handler
+          Path('review/preservation-check.txt').write_text('PASS: base dev ' + base + '\nPASS: upstream ' + os.environ['UPSTREAM_BASE'] + '\nPASS: all non-workflow baseline files match upstream\nPASS: heartbeat and all non-RFID GUI code unchanged\nPASS: existing translations unchanged\nPASS: Bluetooth enabled and runtime RFID auto-detection unchanged\nPASS: all other firmware sources, settings, platform and dependencies unchanged\nPASS: RFID Play uses normal RFID processing\n')
+          PY
+          git diff --check
+          git diff "$DEV_BASE" -- src/Web.cpp html/management.html html/locales REST-API.yaml > review/source-changes.diff
+          cp html/management.html src/Web.cpp review/
+      - name: Commit tested feature on its dev-based branch
+        id: commit
+        run: |
+          set -euo pipefail
+          git add src/Web.cpp html/management.html html/locales/de.json html/locales/en.json html/locales/fr.json REST-API.yaml tools/apply_rfid_list_play_dev.py test/rfid_play_web.test.cjs
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'Add RFID Play to updated dev; preserve heartbeat, Bluetooth and runtime RFID'
+            git push origin HEAD:feature/rfid-list-play-dev
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          printf 'Base: dev %s\nUpstream: %s\nSource: %s\n' "$DEV_BASE" "$UPSTREAM_BASE" "$(git rev-parse HEAD)" > review/source-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Complete-DEV-RFID-Play-source-review
+          path: review/
+          if-no-files-found: ignore
+  build:
+    name: Complete DEV Bluetooth runtime RFID
+    needs: source
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+      - name: Remove checkout credential before dependency builds
+        run: git config --local --unset-all http.https://github.com/.extraheader || true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-espuino-dev-complete-py312-pio619-${{ hashFiles('platformio.ini', 'dependencies.lock') }}
+      - name: Install pinned build tools
+        run: |
+          python -m pip install --upgrade setuptools 'platformio==6.1.19'
+          pio --version
+      - name: Build Complete without overriding dev settings
+        run: |
+          set -euo pipefail
+          pio run -e complete 2>&1 | tee firmware-build.log
+      - name: Verify embedded heartbeat and RFID Play then package application
+        env:
+          SOURCE_SHA: ${{ needs.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import gzip
+          import hashlib
+          import os
+          import re
+          from pathlib import Path
+          generated = Path('.pio/build/complete/generated/HTMLbinary.h').read_text()
+          array = re.search(r'management_BIN\[\]\s*=\s*\{(.*?)\};', generated, re.S)
+          assert array, 'Missing embedded management UI'
+          data = bytes(int(h, 16) for h in re.findall(r'0x([0-9A-Fa-f]{2})', array.group(1)))
+          html = gzip.decompress(data).decode('utf-8')
+          for required in ('connectionStatusIndicator', 'heartbeat-pulse', 'playRFID', '/rfidplay?id='):
+              assert required in html, 'Missing embedded UI feature: ' + required
+          binary = Path('.pio/build/complete/firmware.bin').read_bytes()
+          assert binary[0] == 0xE9 and data in binary, 'Expected UI not found in ESP image'
+          assert len(binary) <= 0x640000, 'Application does not fit Complete OTA slot'
+          assert os.environ['SOURCE_SHA'][:7].encode() in binary, 'Source revision not embedded'
+          output = Path('output')
+          output.mkdir(exist_ok=True)
+          name = 'ESPuino-Complete-DEV-BT-RFID-Play-' + os.environ['SOURCE_SHA'][:7] + '.bin'
+          (output / name).write_bytes(binary)
+          (output / 'SHA256SUMS.txt').write_text(hashlib.sha256(binary).hexdigest() + '  ' + name + '\n')
+          (output / 'build-info.txt').write_text('Repository: joker-mik/ESPuino\nBase branch: dev\nDev base: ' + os.environ['DEV_BASE'] + '\nUpstream dev: ' + os.environ['UPSTREAM_BASE'] + '\nSource commit: ' + os.environ['SOURCE_SHA'] + '\nEnvironment: complete (HAL 6, ESP32-WROVER-E, 16 MB flash)\nBluetooth: enabled\nRFID: runtime selection, auto-detect default\nHeartbeat and RFID Play: verified in embedded firmware UI\nImage: OTA application only, not merged factory image\nHardware test: not performed\n')
+          (output / 'settings.h').write_bytes(Path('src/settings.h').read_bytes())
+          (output / 'settings-complete.h').write_bytes(Path('src/settings-complete.h').read_bytes())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Complete-DEV-BT-RFID-Play
+          path: output/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Complete-DEV-BT-build-log
+          path: firmware-build.log
+          if-no-files-found: ignore

@@ -1,0 +1,202 @@
+name: Complete CUSTOM RFID play firmware
+run-name: Complete CUSTOM with heartbeat, Bluetooth and RFID Play
+on:
+  push:
+    branches: [feature/rfid-list-play-custom]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rfid-play-custom-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  CUSTOM_BASE: a8806d150619842d86198211296f90223d66cbcf
+  FEATURE_SOURCE: 52cc864fa6afe362e65724b047a6e260d9147dc6
+jobs:
+  source:
+    name: Preserve custom features and test RFID Play
+    if: github.ref == 'refs/heads/feature/rfid-list-play-custom'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Port only the reviewed RFID Play change to current custom
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$CUSTOM_BASE" HEAD
+          mkdir -p tools test review
+          python3 - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+          source = os.environ['FEATURE_SOURCE']
+          script = subprocess.check_output(['git', 'show', source + ':tools/apply_rfid_list_play.py'], text=True)
+          replacements = {
+              'ef7249f28d6ffaac4a85a3fa98db8cbc0440f512': '9ee3bbe7fe6abb05a4f6325416f8ca752ba71ab6',
+              '45b4a8454288547f575333e2974ef25943d66b30': '709543b45d4ebfcdd757b73aff6e96c4feb43c27',
+              '#if defined(RFID_READER_TYPE_MFRC522_SPI) || defined(RFID_READER_TYPE_MFRC522_I2C) || defined(RFID_READER_TYPE_PN5180)': '#if defined(RFID_READER_TYPE_RUNTIME)',
+          }
+          for old, new in replacements.items():
+              assert script.count(old) == 1, 'Unexpected patch source: ' + old
+              script = script.replace(old, new, 1)
+          Path('tools/apply_rfid_list_play_custom.py').write_text(script)
+          tests = subprocess.check_output(['git', 'show', source + ':test/rfid_play_web.test.cjs'], text=True)
+          Path('test/rfid_play_web.test.cjs').write_text(tests)
+          PY
+          python3 tools/apply_rfid_list_play_custom.py
+          node --test test/rfid_play_web.test.cjs | tee review/rfid-ui-tests.txt
+      - name: Verify current custom features and settings were not replaced
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+          base = os.environ['CUSTOM_BASE']
+          def original(path):
+              return subprocess.check_output(['git', 'show', base + ':' + path], text=True)
+          html = Path('html/management.html').read_text()
+          before = original('html/management.html')
+          def outside_rfid_section(text):
+              start = text.index('const rfidListSavedAssignments =')
+              end = text.index('async function eraseNVSRFID()', start)
+              return text[:start] + text[end:]
+          assert outside_rfid_section(html) == outside_rfid_section(before), 'Unrelated WebGUI code changed'
+          for marker in ['@keyframes heartbeat-pulse', 'id="connectionStatusIndicator"', '/vendor/bootstrap/bootstrap.min.css', 'async function playRFID(']:
+              assert marker in html, 'Missing GUI feature: ' + marker
+          for language in ['de', 'en', 'fr']:
+              path = 'html/locales/' + language + '.json'
+              labels = json.loads(Path(path).read_text())
+              assert labels.pop('rfidPlayback', None), 'Missing RFID Play translations'
+              assert labels == json.loads(original(path)), 'Existing translations changed'
+          settings = Path('src/settings.h').read_text()
+          assert settings == original('src/settings.h')
+          assert re.search(r'^\s*#define\s+BLUETOOTH_ENABLE\b', settings, re.M)
+          assert re.search(r'^\s*#define\s+RFID_READER_TYPE_RUNTIME\s+0\b', settings, re.M)
+          assert not Path('src/settings-override.h').exists()
+          assert not Path('platformio-override.ini').exists()
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only', base, '--', 'src', 'html', 'platformio.ini', 'sdkconfig.defaults', 'processHtml.py'], text=True).splitlines())
+          allowed = {'src/Web.cpp', 'html/management.html', 'html/locales/de.json', 'html/locales/en.json', 'html/locales/fr.json'}
+          assert changed == allowed, 'Unexpected source/configuration changes: ' + repr(changed)
+          web = Path('src/Web.cpp').read_text()
+          start = web.index('static void handlePlayRFIDRequest(AsyncWebServerRequest *request) {')
+          end = web.index('// handle get settings', start)
+          handler = web[start:end]
+          assert '#if defined(RFID_READER_TYPE_RUNTIME)' in handler
+          assert 'xQueueSend(gRfidCardQueue, tagId, 0)' in handler
+          assert 'AudioPlayer_SetPlaylist' not in handler
+          report = 'PASS: custom base ' + base + '\nPASS: heartbeat and all non-RFID GUI code unchanged\nPASS: existing translations unchanged\nPASS: Bluetooth enabled, runtime RFID auto-detection unchanged\nPASS: all other firmware sources, settings, platform and dependencies unchanged\nPASS: RFID Play uses the current normal RFID queue\n'
+          Path('review/preservation-check.txt').write_text(report)
+          print(report)
+          PY
+          git diff --check
+      - name: Commit the port on the new feature branch
+        id: commit
+        run: |
+          git add tools/apply_rfid_list_play_custom.py test/rfid_play_web.test.cjs src/Web.cpp html/management.html html/locales/de.json html/locales/en.json html/locales/fr.json REST-API.yaml
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'Add RFID Play on current custom without replacing heartbeat, Bluetooth or runtime reader support'
+            git push origin HEAD:feature/rfid-list-play-custom
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git diff "$CUSTOM_BASE" -- src html REST-API.yaml > review/source-changes.diff
+          printf 'Base: custom %s\nSource: %s\n' "$CUSTOM_BASE" "$(git rev-parse HEAD)" > review/source-revision.txt
+          cp html/management.html review/management.html
+          cp src/Web.cpp review/Web.cpp
+      - name: Upload source review and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Complete-CUSTOM-RFID-Play-source-review
+          path: review/
+          if-no-files-found: ignore
+  build:
+    name: Complete CUSTOM Bluetooth runtime RFID
+    needs: source
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-custom-complete-py312-core619-${{ hashFiles('platformio.ini', 'dependencies.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-custom-complete-py312-core619-
+      - name: Install the same PlatformIO core as the custom workflow
+        run: |
+          python -m pip install --upgrade setuptools 'platformio==6.1.19'
+          pio --version
+      - name: Build current custom for Complete without changing settings
+        run: |
+          set -o pipefail
+          pio run -e complete 2>&1 | tee firmware-build.log
+      - name: Verify embedded UI and package OTA firmware
+        env:
+          SOURCE_SHA: ${{ needs.source.outputs.sha }}
+        run: |
+          python - <<'PY'
+          import hashlib
+          import os
+          import zlib
+          from pathlib import Path
+          data = Path('.pio/build/complete/firmware.bin').read_bytes()
+          assert data[0] == 0xE9, 'Invalid ESP application image'
+          html = None
+          offset = 0
+          while True:
+              offset = data.find(b'\x1f\x8b\x08', offset)
+              if offset < 0:
+                  break
+              try:
+                  content = zlib.decompressobj(31).decompress(data[offset:], 2 * 1024 * 1024)
+                  if b'connectionStatusIndicator' in content and b'/rfidplay?id=' in content:
+                      html = content
+                      break
+              except zlib.error:
+                  pass
+              offset += 1
+          assert html is not None, 'New RFID Play and heartbeat are not both embedded in the binary'
+          assert b'heartbeat-pulse' in html
+          assert b'/vendor/bootstrap/bootstrap.min.css' in html
+          output = Path('output')
+          output.mkdir(exist_ok=True)
+          name = 'ESPuino-Complete-Custom-BT-RFID-Play.bin'
+          (output / name).write_bytes(data)
+          (output / 'SHA256SUMS.txt').write_text(hashlib.sha256(data).hexdigest() + '  ' + name + '\n')
+          info = ('Repository: joker-mik/ESPuino\nBase branch: custom\nBase commit: ' + os.environ['CUSTOM_BASE'] + '\nSource commit: ' + os.environ['SOURCE_SHA'] + '\nEnvironment: complete (HAL 6, ESP32-WROVER-E, 16 MB)\nBluetooth: enabled, unchanged from custom\nRFID: runtime selection/auto-detection, unchanged from custom\nUI: heartbeat verified in binary; RFID Play verified in binary\nImage: OTA application, not a factory/merged image\nHardware test: not performed\n')
+          (output / 'build-info.txt').write_text(info)
+          print(info)
+          print('Firmware bytes:', len(data))
+          print('SHA256:', hashlib.sha256(data).hexdigest())
+          PY
+          cp src/settings.h src/settings-complete.h platformio.ini custom_16mb_ota.csv output/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Complete-CUSTOM-BT-RFID-Play
+          path: output/
+          if-no-files-found: error
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Complete-CUSTOM-BT-RFID-Play-build-log
+          path: firmware-build.log
+          if-no-files-found: ignore

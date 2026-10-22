@@ -55,16 +55,21 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.13'
+          # The pinned minify_html 0.15.0 has CPython 3.12 Linux wheels,
+          # but on 3.13 pip falls back to a failing Rust source build.
+          python-version: '3.12'
       - uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: ${{ runner.os }}-rfid-play-${{ matrix.reader }}-${{ hashFiles('platformio.ini', 'dependencies.lock') }}
+          # Do not restore virtual environments created with Python 3.13.
+          key: ${{ runner.os }}-rfid-play-py312-${{ matrix.reader }}-${{ hashFiles('platformio.ini', 'dependencies.lock') }}
           restore-keys: |
-            ${{ runner.os }}-rfid-play-${{ matrix.reader }}-
-            ${{ runner.os }}-
-      - name: Install PlatformIO
-        run: python -m pip install --upgrade setuptools platformio
+            ${{ runner.os }}-rfid-play-py312-${{ matrix.reader }}-
+      - name: Install PlatformIO and HTML build dependencies
+        run: |
+          python -m pip install --upgrade setuptools platformio flask_minify
+          python -m pip install --only-binary=:all: minify_html==0.15.0
+          python -c "import minify_html; from importlib.metadata import version; assert version('minify_html') == '0.15.0'; assert minify_html.minify('<p>test</p>')"
       - name: Select reader and enable Bluetooth
         env:
           RFID_READER: ${{ matrix.reader }}

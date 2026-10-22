@@ -416,6 +416,35 @@ paths:
       responses:
         "200":
           description: Successful RFID-tag assignment deletion.
+  /rfidplay:
+    post:
+      summary: Trigger a saved RFID card without placing it on the reader.
+      description: >-
+        Enqueues the card ID for the normal RFID lookup handler. Saved playback
+        mode, audiobook position, modification commands and duplicate-card
+        settings are preserved. Does not emulate physical card removal.
+        A 202 response confirms queue acceptance, not successful playback.
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 12
+            pattern: '^[0-9]+$'
+          description: Saved RFID ID as a string; leading zeroes are significant.
+      responses:
+        "202":
+          description: Card queued for processing.
+        "400":
+          description: Missing or invalid card ID.
+        "404":
+          description: Card assignment not found.
+        "501":
+          description: Firmware compiled without RFID processing.
+        "503":
+          description: RFID queue unavailable or full. No event was queued.
   /rfid/ids-only:
     get:
       summary: Get an array of RFID tag ID names.

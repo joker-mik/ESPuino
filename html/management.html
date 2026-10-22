@@ -5033,8 +5033,20 @@
 				}
 				let deleteSpan = document.createElement("span");
 				deleteSpan.classList.add("float-end");
-				deleteSpan.classList.add("button-group");
+				deleteSpan.classList.add("button-group", "d-inline-flex", "gap-2");
+				let playButton = document.createElement("button");
+				playButton.type = "button";
+				playButton.classList.add("btn", "btn-success");
+				playButton.title = i18next.t("rfidPlayback.trigger");
+				playButton.setAttribute("aria-label", playButton.title + " " + rfid.id);
+				let playIcon = document.createElement("i");
+				playIcon.classList.add("fa", "fa-play");
+				playIcon.setAttribute("aria-hidden", "true");
+				playButton.appendChild(playIcon);
+				playButton.addEventListener("click", () => playRFID(rfid.id, playButton));
+				deleteSpan.appendChild(playButton);
 				let deleteButton = document.createElement("button");
+				deleteButton.type = "button";
 				deleteButton.classList.add("btn");
 				deleteButton.classList.add("btn-danger");
 				deleteButton.classList.add("fa");
@@ -5060,6 +5072,30 @@
 			exportBtn.classList.toggle('disabled', !hasAssignments);
 			exportBtn.setAttribute('aria-disabled', !hasAssignments);
 			exportBtn.tabIndex = hasAssignments ? 0 : -1;
+		}
+		async function playRFID(tagId, button) {
+			if (button.disabled) {
+				return;
+			}
+			button.disabled = true;
+			const controller = new AbortController();
+			const timeout = setTimeout(() => controller.abort(), 15000);
+			try {
+				const response = await fetch("http://" + host + "/rfidplay?id=" + encodeURIComponent(tagId), {
+					method: "POST",
+					signal: controller.signal
+				});
+				// A legacy firmware may return its HTML 404 page with HTTP 200.
+				if (response.status !== 202) {
+					throw new Error(response.statusText || "HTTP " + response.status);
+				}
+				toaster.success(i18next.t("rfidPlayback.queued"));
+			} catch (error) {
+				toaster.error(i18next.t("rfidPlayback.error") + ": " + error.message);
+			} finally {
+				clearTimeout(timeout);
+				button.disabled = false;
+			}
 		}
 		async function deleteRFID(tagId) {
 			console.log("deleting", tagId);

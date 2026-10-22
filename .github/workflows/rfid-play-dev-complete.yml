@@ -162,7 +162,7 @@ jobs:
           import re
           from pathlib import Path
           generated = Path('.pio/build/complete/generated/HTMLbinary.h').read_text()
-          array = re.search(r'management_BIN\[\]\s*=\s*\{(.*?)\};', generated, re.S)
+          array = re.search(r'\bmanagement_html_BIN\s*\[\s*\]\s*=\s*\{(.*?)\};', generated, re.S)
           assert array, 'Missing embedded management UI'
           data = bytes(int(h, 16) for h in re.findall(r'0x([0-9A-Fa-f]{2})', array.group(1)))
           html = gzip.decompress(data).decode('utf-8')

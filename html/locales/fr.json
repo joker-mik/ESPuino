@@ -760,5 +760,10 @@
 		"currvoltage": "Tension de la batterie actuelle : {{currvoltage}} V",
 		"chargelevel": "Niveau de charge actuel : {{chargelevel}} %",
 		"hallsensor": "Valeur nulle du capteur d'effet Hall : {{hsnullfieldvalue}}, actuel : {{hsactual}}, diff : {{hsdiff}}, Dernier état (LastWaitFor) : {{hslastwaitforstate}} (attendu : {{hswaited}} ms)"
-	}
+	},
+    "rfidPlayback": {
+        "trigger": "Déclencher la carte RFID",
+        "queued": "Carte RFID transmise pour traitement",
+        "error": "Impossible de déclencher la carte RFID"
+    }
 }

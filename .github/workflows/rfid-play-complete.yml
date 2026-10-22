@@ -1,0 +1,112 @@
+name: Complete RFID play test firmware
+run-name: Build Complete RFID play firmware (RC522 and PN5180, no Bluetooth)
+on:
+  push:
+    branches: [feature/rfid-list-play-complete]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rfid-play-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  source:
+    name: Prepare and test RFID play source
+    if: github.ref == 'refs/heads/feature/rfid-list-play-complete'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply source change and run regression tests
+        run: |
+          python3 tools/apply_rfid_list_play.py
+          node --test test/rfid_play_web.test.cjs
+          git diff --check
+      - name: Commit prepared source on the feature branch
+        id: commit
+        run: |
+          git add src/Web.cpp html/management.html html/locales/de.json html/locales/en.json html/locales/fr.json REST-API.yaml
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'Add Play buttons for saved RFID cards using the normal RFID queue'
+            git push origin HEAD:feature/rfid-list-play-complete
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  build:
+    name: Complete ${{ matrix.reader }} noBT
+    needs: source
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        reader: [RC522, PN5180]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-rfid-play-${{ matrix.reader }}-${{ hashFiles('platformio.ini', 'dependencies.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rfid-play-${{ matrix.reader }}-
+            ${{ runner.os }}-
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade setuptools platformio
+      - name: Select reader (Bluetooth remains disabled)
+        env:
+          RFID_READER: ${{ matrix.reader }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          path = Path('src/settings.h')
+          text = path.read_text()
+          assert not re.search(r'^\s*#define\s+BLUETOOTH_ENABLE\b', text, re.M)
+          if os.environ['RFID_READER'] == 'PN5180':
+              assert text.count('//#define RFID_READER_TYPE_PN5180') == 1
+              text = text.replace('#define RFID_READER_TYPE_MFRC522_SPI', '//#define RFID_READER_TYPE_MFRC522_SPI')
+              text = text.replace('//#define RFID_READER_TYPE_PN5180', '#define RFID_READER_TYPE_PN5180')
+              path.write_text(text)
+          PY
+      - name: Build Complete firmware
+        run: |
+          set -o pipefail
+          pio run -e complete 2>&1 | tee firmware-build.log
+      - name: Package the OTA application image
+        env:
+          RFID_READER: ${{ matrix.reader }}
+          SOURCE_SHA: ${{ needs.source.outputs.sha }}
+        run: |
+          mkdir -p output
+          test -s .pio/build/complete/firmware.bin
+          cp .pio/build/complete/firmware.bin "output/ESPuino-Complete-${RFID_READER}-noBT-RFID-Play.bin"
+          printf 'Source: joker-mik/ESPuino\nCommit: %s\nEnvironment: complete (HAL 6, ESP32-WROVER-E, 16 MB)\nReader: %s\nBluetooth: disabled\nImage type: OTA application (not merged factory image)\nHardware test: not performed\n' "$SOURCE_SHA" "$RFID_READER" > output/build-info.txt
+          cp src/settings.h output/settings.h
+          cp src/settings-complete.h output/settings-complete.h
+          (cd output && sha256sum *.bin > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Complete-${{ matrix.reader }}-noBT-RFID-Play
+          path: output/
+          if-no-files-found: error
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Complete-${{ matrix.reader }}-build-log
+          path: firmware-build.log
+          if-no-files-found: ignore

@@ -475,5 +475,10 @@
 		"currvoltage": "Aktuelle Batteriespannung: {{currvoltage}} V",
 		"chargelevel": "Aktuelle Batterieladung: {{chargelevel}} %",
 		"hallsensor": "HallEffectSensor NullFieldValue: {{hsnullfieldvalue}}, actual: {{hsactual}}, diff:{{hsdiff}}, LastWaitFor_State:{{hslastwaitforstate}} (waited:{{hswaited}} ms)"
-	}
+	},
+    "rfidPlayback": {
+        "trigger": "RFID-Karte auslösen",
+        "queued": "RFID-Karte zur Verarbeitung übergeben",
+        "error": "RFID-Karte konnte nicht ausgelöst werden"
+    }
 }

@@ -18,6 +18,7 @@
 #include "Log.h"
 #include "MemX.h"
 #include "Mqtt.h"
+#include "Queues.h"
 #include "Rfid.h"
 #include "RotaryEncoder.h"
 #include "SdCard.h"
@@ -85,6 +86,7 @@ static void handleWiFiScanRequest(AsyncWebServerRequest *request);
 static void handleGetRFIDRequest(AsyncWebServerRequest *request);
 static void handlePostRFIDRequest(AsyncWebServerRequest *request, JsonVariant &json);
 static void handleDeleteRFIDRequest(AsyncWebServerRequest *request);
+static void handlePlayRFIDRequest(AsyncWebServerRequest *request);
 static void handleGetInfo(AsyncWebServerRequest *request);
 static void handleGetSettings(AsyncWebServerRequest *request);
 static void handlePostSettings(AsyncWebServerRequest *request, JsonVariant &json);
@@ -536,6 +538,7 @@ void webserverStart(void) {
 		wServer.addHandler(new AsyncCallbackJsonWebHandler("/rfid", handlePostRFIDRequest));
 		wServer.addRewrite(new OneParamRewrite("/rfid/{id}", "/rfid?id={id}"));
 		wServer.on("/rfid", HTTP_DELETE, handleDeleteRFIDRequest);
+		wServer.on("/rfidplay", HTTP_POST, handlePlayRFIDRequest);
 
 		// WiFi scan
 		wServer.on("/wifiscan", HTTP_GET, handleWiFiScanRequest);
@@ -1329,6 +1332,42 @@ void handleGetInfo(AsyncWebServerRequest *request) {
 	response->setLength();
 	request->send(response);
 	System_UpdateActivityTimer();
+}
+
+// Queue a saved card exactly like a reader event; never bypass RFID lookup.
+static void handlePlayRFIDRequest(AsyncWebServerRequest *request) {
+#if defined(RFID_READER_TYPE_MFRC522_SPI) || defined(RFID_READER_TYPE_MFRC522_I2C) || defined(RFID_READER_TYPE_PN5180)
+	if (!request->hasParam("id")) {
+		request->send(400, "text/plain; charset=utf-8", "Missing RFID id");
+		return;
+	}
+	const String id = request->getParam("id")->value();
+	char tagId[cardIdStringSize] = {0};
+	if (id.length() == 0 || id.length() >= sizeof(tagId)) {
+		request->send(400, "text/plain; charset=utf-8", "Invalid RFID id length");
+		return;
+	}
+	for (size_t i = 0; i < id.length(); ++i) {
+		if (id[i] < '0' || id[i] > '9') {
+			request->send(400, "text/plain; charset=utf-8", "RFID id must contain digits only");
+			return;
+		}
+	}
+	if (!gPrefsRfid.isKey(id.c_str())) {
+		request->send(404, "text/plain; charset=utf-8", "RFID assignment not found");
+		return;
+	}
+	id.toCharArray(tagId, sizeof(tagId));
+	// Zero-initialized, fixed-size queue item; retain leading zeroes in the id.
+	if (gRfidCardQueue == nullptr || xQueueSend(gRfidCardQueue, tagId, 0) != pdPASS) {
+		request->send(503, "text/plain; charset=utf-8", "RFID queue unavailable or busy");
+		return;
+	}
+	// Acceptance is not a promise that playback has already started.
+	request->send(202, "application/json", "{\"status\":\"queued\"}");
+#else
+	request->send(501, "text/plain; charset=utf-8", "RFID processing is not enabled in this build");
+#endif
 }
 
 // handle get settings

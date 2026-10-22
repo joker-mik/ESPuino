@@ -475,5 +475,10 @@
 		"currvoltage": "Current battery voltage: {{currvoltage}} V",
 		"chargelevel": "Current charge level: {{chargelevel}} %",
 		"hallsensor": "HallEffectSensor NullFieldValue: {{hsnullfieldvalue}}, actual: {{hsactual}}, diff:{{hsdiff}}, LastWaitFor_State:{{hslastwaitforstate}} (waited:{{hswaited}} ms)"
-	}
+	},
+    "rfidPlayback": {
+        "trigger": "Trigger RFID card",
+        "queued": "RFID card queued for processing",
+        "error": "Could not trigger RFID card"
+    }
 }

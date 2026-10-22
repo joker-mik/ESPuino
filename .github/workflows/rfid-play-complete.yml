@@ -1,5 +1,5 @@
-name: Complete RFID play test firmware
-run-name: Build Complete RFID play firmware (RC522 and PN5180, no Bluetooth)
+name: Complete RFID play Bluetooth test firmware
+run-name: Build Complete RFID play firmware (RC522 and PN5180, Bluetooth enabled)
 on:
   push:
     branches: [feature/rfid-list-play-complete]
@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: rfid-play-${{ github.ref }}
+  group: rfid-play-bt-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   source:
@@ -40,7 +40,7 @@ jobs:
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
   build:
-    name: Complete ${{ matrix.reader }} noBT
+    name: Complete ${{ matrix.reader }} BT
     needs: source
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -65,7 +65,7 @@ jobs:
             ${{ runner.os }}-
       - name: Install PlatformIO
         run: python -m pip install --upgrade setuptools platformio
-      - name: Select reader (Bluetooth remains disabled)
+      - name: Select reader and enable Bluetooth
         env:
           RFID_READER: ${{ matrix.reader }}
         run: |
@@ -73,14 +73,20 @@ jobs:
           import os
           import re
           from pathlib import Path
+          assert not Path('src/settings-override.h').exists(), 'Review custom settings before selecting the firmware variant'
           path = Path('src/settings.h')
           text = path.read_text()
-          assert not re.search(r'^\s*#define\s+BLUETOOTH_ENABLE\b', text, re.M)
+          text, count = re.subn(r'(?m)^([ \t]*)//[ \t]*#define[ \t]+BLUETOOTH_ENABLE\b', r'\1#define BLUETOOTH_ENABLE', text)
+          assert count == 1, 'Expected exactly one disabled Bluetooth definition'
           if os.environ['RFID_READER'] == 'PN5180':
               assert text.count('//#define RFID_READER_TYPE_PN5180') == 1
               text = text.replace('#define RFID_READER_TYPE_MFRC522_SPI', '//#define RFID_READER_TYPE_MFRC522_SPI')
               text = text.replace('//#define RFID_READER_TYPE_PN5180', '#define RFID_READER_TYPE_PN5180')
-              path.write_text(text)
+          assert re.search(r'^\s*#define\s+BLUETOOTH_ENABLE\b', text, re.M), 'Bluetooth must be enabled in this firmware'
+          readers = re.findall(r'^\s*#define\s+RFID_READER_TYPE_(\w+)\b', text, re.M)
+          expected = 'PN5180' if os.environ['RFID_READER'] == 'PN5180' else 'MFRC522_SPI'
+          assert readers == [expected], f'Unexpected RFID reader configuration: {readers}'
+          path.write_text(text)
           PY
       - name: Build Complete firmware
         run: |
@@ -93,20 +99,20 @@ jobs:
         run: |
           mkdir -p output
           test -s .pio/build/complete/firmware.bin
-          cp .pio/build/complete/firmware.bin "output/ESPuino-Complete-${RFID_READER}-noBT-RFID-Play.bin"
-          printf 'Source: joker-mik/ESPuino\nCommit: %s\nEnvironment: complete (HAL 6, ESP32-WROVER-E, 16 MB)\nReader: %s\nBluetooth: disabled\nImage type: OTA application (not merged factory image)\nHardware test: not performed\n' "$SOURCE_SHA" "$RFID_READER" > output/build-info.txt
+          cp .pio/build/complete/firmware.bin "output/ESPuino-Complete-${RFID_READER}-BT-RFID-Play.bin"
+          printf 'Source: joker-mik/ESPuino\nCommit: %s\nEnvironment: complete (HAL 6, ESP32-WROVER-E, 16 MB)\nReader: %s\nBluetooth: enabled\nImage type: OTA application (not merged factory image)\nHardware test: not performed\n' "$SOURCE_SHA" "$RFID_READER" > output/build-info.txt
           cp src/settings.h output/settings.h
           cp src/settings-complete.h output/settings-complete.h
           (cd output && sha256sum *.bin > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
-          name: Complete-${{ matrix.reader }}-noBT-RFID-Play
+          name: Complete-${{ matrix.reader }}-BT-RFID-Play
           path: output/
           if-no-files-found: error
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Complete-${{ matrix.reader }}-build-log
+          name: Complete-${{ matrix.reader }}-BT-build-log
           path: firmware-build.log
           if-no-files-found: ignore

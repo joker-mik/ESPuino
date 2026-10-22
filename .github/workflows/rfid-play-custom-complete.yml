@@ -49,9 +49,31 @@ jobs:
               script = script.replace(old, new, 1)
           Path('tools/apply_rfid_list_play_custom.py').write_text(script)
           tests = subprocess.check_output(['git', 'show', source + ':test/rfid_play_web.test.cjs'], text=True)
+          # Current custom toggles the export button's disabled class. Model the
+          # real DOM API instead of changing production code to fit an old mock.
+          old = 'classList: {values: new Set(), add(...values) {values.forEach(v => this.values.add(v));}},'
+          new = '''classList: {
+              values: new Set(),
+              add(...values) {values.forEach(v => this.values.add(v));},
+              remove(...values) {values.forEach(v => this.values.delete(v));},
+              contains(value) {return this.values.has(value);},
+              toggle(value, force) {
+                const enabled = force === undefined ? !this.values.has(value) : Boolean(force);
+                if (enabled) this.values.add(value); else this.values.delete(value);
+                return enabled;
+              }
+            },'''
+          assert tests.count(old) == 1
+          tests = tests.replace(old, new, 1)
+          old = 'setAttribute(key, value) {this.attrs[key] = value;},'
+          assert tests.count(old) == 1
+          tests = tests.replace(old, old + '\n    removeAttribute(key) {delete this.attrs[key];},', 1)
           Path('test/rfid_play_web.test.cjs').write_text(tests)
           PY
           python3 tools/apply_rfid_list_play_custom.py
+          cp html/management.html review/management.html
+          cp src/Web.cpp review/Web.cpp
+          git diff "$CUSTOM_BASE" -- src html REST-API.yaml > review/source-changes.diff
           node --test test/rfid_play_web.test.cjs | tee review/rfid-ui-tests.txt
       - name: Verify current custom features and settings were not replaced
         run: |
@@ -110,10 +132,7 @@ jobs:
             git push origin HEAD:feature/rfid-list-play-custom
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          git diff "$CUSTOM_BASE" -- src html REST-API.yaml > review/source-changes.diff
           printf 'Base: custom %s\nSource: %s\n' "$CUSTOM_BASE" "$(git rev-parse HEAD)" > review/source-revision.txt
-          cp html/management.html review/management.html
-          cp src/Web.cpp review/Web.cpp
       - name: Upload source review and test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -130,7 +149,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ needs.source.outputs.sha }}
-          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

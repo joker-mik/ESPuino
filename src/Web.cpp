@@ -366,7 +366,7 @@ static void handleWiFiScanRequest(AsyncWebServerRequest *request) {
 			json += ",\"channel\":" + String(WiFi.channel(i));
 			json += ",\"secure\":" + String(WiFi.encryptionType(i));
 			json += ",\"quality\":" + String(quality); // WiFi strength in percent
-			json += ",\"wico\":\"w" + String(int(round(map(quality, 0, 100, 1, 4)))) + "\""; // WiFi strength icon ("w1"-"w4")
+			json += ",\"wico\":\"w" + String(map(quality, 0, 100, 1, 4)) + "\""; // WiFi strength icon ("w1"-"w4")
 			json += ",\"pico\":\"" + String((WIFI_AUTH_OPEN == WiFi.encryptionType(i)) ? "" : "pw") + "\""; // auth icon ("p1" for secured)
 			json += "}";
 		}
@@ -740,10 +740,13 @@ void webserverStart(void) {
 
 		wServer.onNotFound(notFound);
 
-		// allow cors for local debug (https://github.com/me-no-dev/ESPAsyncWebServer/issues/1080)
+#ifdef ENABLE_CORS_FOR_DEBUG
+		// allow cors for local debug only (https://github.com/me-no-dev/ESPAsyncWebServer/issues/1080):
+		// with these headers any web page in the browser can read and drive the whole API
 		DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Accept, Content-Type, Authorization");
 		DefaultHeaders::Instance().addHeader("Access-Control-Allow-Credentials", "true");
 		DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+#endif
 		wServer.begin();
 		webserverStarted = true;
 		Log_Println(httpReady, LOGLEVEL_NOTICE);
@@ -1041,6 +1044,9 @@ WebsocketCodeType JSONToSettings(JsonObject doc) {
 	if (doc["ftp"].is<JsonObject>()) {
 		const char *_ftpUser = doc["ftp"]["username"];
 		const char *_ftpPwd = doc["ftp"]["password"];
+		// The password is write-only (settingsToJSON() only says whether one is stored),
+		// so a request without it keeps the stored one.
+		const bool ftpPwdGiven = doc["ftp"]["password"].is<const char *>();
 
 		// The web interface already limits both to the lengths published below, so this only
 		// catches requests made directly against /settings.
@@ -1048,15 +1054,17 @@ WebsocketCodeType JSONToSettings(JsonObject doc) {
 			Log_Printf(LOGLEVEL_ERROR, webSaveSettingsError, "ftp.username too long");
 			return WebsocketCodeType::Error;
 		}
-		if (String(_ftpPwd).length() >= ftpPasswordLength) {
+		if (ftpPwdGiven && String(_ftpPwd).length() >= ftpPasswordLength) {
 			Log_Printf(LOGLEVEL_ERROR, webSaveSettingsError, "ftp.password too long");
 			return WebsocketCodeType::Error;
 		}
 
 		gPrefsSettings.putString("ftpuser", (String) _ftpUser);
-		gPrefsSettings.putString("ftppassword", (String) _ftpPwd);
+		if (ftpPwdGiven) {
+			gPrefsSettings.putString("ftppassword", (String) _ftpPwd);
+		}
 		// Check if settings were written successfully
-		if (!(String(_ftpUser).equals(gPrefsSettings.getString("ftpuser", "-1")) || String(_ftpPwd).equals(gPrefsSettings.getString("ftppassword", "-1")))) {
+		if (!String(_ftpUser).equals(gPrefsSettings.getString("ftpuser", "-1")) || (ftpPwdGiven && !String(_ftpPwd).equals(gPrefsSettings.getString("ftppassword", "-1")))) {
 			Log_Printf(LOGLEVEL_ERROR, webSaveSettingsError, "ftp");
 			return WebsocketCodeType::Error;
 		}
@@ -1119,8 +1127,17 @@ WebsocketCodeType JSONToSettings(JsonObject doc) {
 			Log_Printf(LOGLEVEL_ERROR, webSaveSettingsError, "mqtt.username too long");
 			return WebsocketCodeType::Error;
 		}
-		if (String(_mqttPwd).length() >= mqttPasswordLength) {
+		// The password is write-only (settingsToJSON() only says whether one is stored), so a request
+		// without it keeps the stored one -- but only for the broker it was entered for. Keeping it while
+		// server or username change would let anyone on the network point the box at a broker of their
+		// own and read the password at the next connect, so a new target needs the password again.
+		const bool mqttPwdGiven = doc["mqtt"]["password"].is<const char *>();
+		if (mqttPwdGiven && String(_mqttPwd).length() >= mqttPasswordLength) {
 			Log_Printf(LOGLEVEL_ERROR, webSaveSettingsError, "mqtt.password too long");
+			return WebsocketCodeType::Error;
+		}
+		if (!mqttPwdGiven && gPrefsSettings.getString("mqttPassword", "").length() > 0 && (!String(_mqttServer).equals(gPrefsSettings.getString("mqttServer", "-1")) || !String(_mqttUser).equals(gPrefsSettings.getString("mqttUser", "-1")))) {
+			Log_Printf(LOGLEVEL_ERROR, webSaveSettingsError, "mqtt.password required for a new server or username");
 			return WebsocketCodeType::Error;
 		}
 
@@ -1131,7 +1148,9 @@ WebsocketCodeType JSONToSettings(JsonObject doc) {
 		gPrefsSettings.putString("mqttBaseTopic", mqttBaseTopicStr);
 		gPrefsSettings.putString("mqttServer", (String) _mqttServer);
 		gPrefsSettings.putString("mqttUser", (String) _mqttUser);
-		gPrefsSettings.putString("mqttPassword", (String) _mqttPwd);
+		if (mqttPwdGiven) {
+			gPrefsSettings.putString("mqttPassword", (String) _mqttPwd);
+		}
 		gPrefsSettings.putUInt("mqttPort", _mqttPort);
 
 		// verify writes (include deviceId and baseTopic)
@@ -1305,7 +1324,7 @@ static void settingsToJSON(JsonObject obj, const String section) {
 		wifiObj["maxHostnameLength"].set(hostnameMaxLength);
 		wifiObj["scanOnStart"].set(gPrefsSettings.getBool("ScanWiFiOnStart", false));
 		wifiObj["apSSID"] = Wlan_GetApSSID();
-		wifiObj["apPassword"] = Wlan_GetApPassword();
+		wifiObj["apPasswordSet"].set(Wlan_GetApPassword().length() > 0); // write-only, see handlePostWiFiConfig()
 		wifiObj["apTimeout"] = Wlan_GetApTimeoutMinutes();
 	}
 	if (section == "ssids") {
@@ -1554,7 +1573,7 @@ static void settingsToJSON(JsonObject obj, const String section) {
 	if ((section == "") || (section == "ftp")) {
 		JsonObject ftpObj = obj["ftp"].to<JsonObject>();
 		ftpObj["username"] = gPrefsSettings.getString("ftpuser", "-1");
-		ftpObj["password"] = gPrefsSettings.getString("ftppassword", "-1");
+		ftpObj["passwordSet"].set(gPrefsSettings.getString("ftppassword", "").length() > 0); // write-only, see JSONToSettings()
 		ftpObj["maxUserLength"].set(ftpUserLength - 1);
 		ftpObj["maxPwdLength"].set(ftpPasswordLength - 1);
 	}
@@ -1574,7 +1593,7 @@ static void settingsToJSON(JsonObject obj, const String section) {
 		mqttObj["server"] = gPrefsSettings.getString("mqttServer", "-1");
 		mqttObj["port"].set(gPrefsSettings.getUInt("mqttPort", 0));
 		mqttObj["username"] = gPrefsSettings.getString("mqttUser", "-1");
-		mqttObj["password"] = gPrefsSettings.getString("mqttPassword", "-1");
+		mqttObj["passwordSet"].set(gPrefsSettings.getString("mqttPassword", "").length() > 0); // write-only, see JSONToSettings()
 		mqttObj["maxUserLength"].set(mqttUserLength - 1);
 		mqttObj["maxPwdLength"].set(mqttPasswordLength - 1);
 		mqttObj["maxClientIdLength"].set(mqttClientIdLength - 1);
@@ -1708,6 +1727,7 @@ void handleGetInfo(AsyncWebServerRequest *request) {
 	if (response->overflowed()) {
 		// JSON buffer too small for data
 		Log_Println(jsonbufferOverflow, LOGLEVEL_ERROR);
+		delete response; // never handed to send(), so nobody else frees it
 		request->send(500);
 		return;
 	}
@@ -1731,6 +1751,7 @@ void handleGetSettings(AsyncWebServerRequest *request) {
 	if (response->overflowed()) {
 		// JSON buffer too small for data
 		Log_Println(jsonbufferOverflow, LOGLEVEL_ERROR);
+		delete response; // never handed to send(), so nobody else frees it
 		request->send(500);
 		return;
 	}
@@ -1809,6 +1830,7 @@ void handleDebugRequest(AsyncWebServerRequest *request) {
 	if (response->overflowed()) {
 		// JSON buffer too small for data
 		Log_Println(jsonbufferOverflow, LOGLEVEL_ERROR);
+		delete response; // never handed to send(), so nobody else frees it
 		request->send(500);
 		return;
 	}
@@ -1949,14 +1971,13 @@ void onWebsocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsE
 			// the whole message is in a single frame and we got all of it's data
 			// Serial.printf("ws[%s][%u] %s-message[%llu]: ", server->url(), client->id(), (info->opcode == WS_TEXT) ? "text" : "binary", info->len);
 
-			WebsocketCodeType result = processJsonRequest((char *) data);
-			if (result != WebsocketCodeType::Error && result != WebsocketCodeType::Silent) {
-				Web_SendWebsocketData(client->id(), result);
-			}
-
 			if (info->opcode == WS_TEXT) {
-				data[len] = 0;
+				data[len] = 0; // processJsonRequest() expects a C string
 				// Serial.printf("%s\n", (char *)data);
+				WebsocketCodeType result = processJsonRequest((char *) data);
+				if (result != WebsocketCodeType::Error && result != WebsocketCodeType::Silent) {
+					Web_SendWebsocketData(client->id(), result);
+				}
 			} else {
 				for (size_t i = 0; i < info->len; i++) {
 					Serial.printf("%02x ", data[i]);
@@ -2216,11 +2237,14 @@ void explorerHandleListRequest(AsyncWebServerRequest *request) {
 
 	if (!root) {
 		Log_Println(failedToOpenDirectory, LOGLEVEL_DEBUG);
+		request->send(404);
 		return;
 	}
 
 	if (!root.isDirectory()) {
 		Log_Println(notADirectory, LOGLEVEL_DEBUG);
+		root.close();
+		request->send(400);
 		return;
 	}
 
@@ -2256,12 +2280,14 @@ void explorerHandleListRequest(AsyncWebServerRequest *request) {
 			}
 		}
 		MyfileName = gFSystem.nextFileName(root, &isDir);
+		esp_task_wdt_reset(); // async_tcp is watchdog-subscribed; large folders on a slow card take a while
 	}
 	root.close();
 
 	if (response->overflowed()) {
 		// JSON buffer too small for data
 		Log_Println(jsonbufferOverflow, LOGLEVEL_ERROR);
+		delete response; // never handed to send(), so nobody else frees it
 		request->send(500);
 		return;
 	}
@@ -2585,6 +2611,10 @@ void handlePostSavedSSIDs(AsyncWebServerRequest *request, JsonVariant &json) {
 }
 
 void handleDeleteSavedSSIDs(AsyncWebServerRequest *request) {
+	if (!request->hasParam("ssid")) {
+		request->send(400, "text/plain; charset=utf-8", "missing parameter: ssid");
+		return;
+	}
 	const AsyncWebParameter *p = request->getParam("ssid");
 	const String ssid = p->value();
 
@@ -2619,7 +2649,7 @@ void handleGetWiFiConfig(AsyncWebServerRequest *request) {
 	obj["maxHostnameLength"].set(hostnameMaxLength);
 	obj["scanOnStart"].set(scanWifiOnStart);
 	obj["apSSID"] = Wlan_GetApSSID();
-	obj["apPassword"] = Wlan_GetApPassword();
+	obj["apPasswordSet"].set(Wlan_GetApPassword().length() > 0); // write-only, see handlePostWiFiConfig()
 	obj["apTimeout"] = Wlan_GetApTimeoutMinutes();
 
 	response->setLength();
@@ -2629,12 +2659,16 @@ void handleGetWiFiConfig(AsyncWebServerRequest *request) {
 void handlePostWiFiConfig(AsyncWebServerRequest *request, JsonVariant &json) {
 	const JsonObject &jsonObj = json.as<JsonObject>();
 
+	// Every field is optional and a missing one keeps its stored value: the access-point setup page only
+	// sends the hostname, and the AP password is write-only (handleGetWiFiConfig() only says whether one
+	// is stored). An empty AP password is a deliberate choice -- it opens the access point.
 	// always perform perform a WiFi scan on startup?
-	bool alwaysScan = jsonObj["scanOnStart"];
-	gPrefsSettings.putBool("ScanWiFiOnStart", alwaysScan);
+	if (jsonObj["scanOnStart"].is<bool>()) {
+		gPrefsSettings.putBool("ScanWiFiOnStart", jsonObj["scanOnStart"].as<bool>());
+	}
 
 	// hostname
-	String strHostname = jsonObj["hostname"];
+	String strHostname = jsonObj["hostname"].is<const char *>() ? jsonObj["hostname"].as<String>() : Wlan_GetHostname();
 	if (!Wlan_ValidateHostname(strHostname)) {
 		Log_Println("hostname validation failed", LOGLEVEL_ERROR);
 		request->send(400, "text/plain; charset=utf-8", "hostname validation failed");
@@ -2642,20 +2676,20 @@ void handlePostWiFiConfig(AsyncWebServerRequest *request, JsonVariant &json) {
 	}
 
 	// ESPuino's own access-point (used as fallback when no known WiFi is available)
-	String strApSSID = jsonObj["apSSID"];
+	String strApSSID = jsonObj["apSSID"].is<const char *>() ? jsonObj["apSSID"].as<String>() : Wlan_GetApSSID();
 	if (!Wlan_ValidateApSSID(strApSSID)) {
 		Log_Println("AP SSID validation failed", LOGLEVEL_ERROR);
 		request->send(400, "text/plain; charset=utf-8", "AP SSID validation failed");
 		return;
 	}
-	String strApPassword = jsonObj["apPassword"];
+	String strApPassword = jsonObj["apPassword"].is<const char *>() ? jsonObj["apPassword"].as<String>() : Wlan_GetApPassword();
 	if (!Wlan_ValidateApPassword(strApPassword)) {
 		Log_Println("AP password validation failed", LOGLEVEL_ERROR);
 		request->send(400, "text/plain; charset=utf-8", "AP password validation failed");
 		return;
 	}
 	// minutes the AP stays open before auto-closing; 0 = never close automatically
-	uint32_t apTimeoutMinutes = jsonObj["apTimeout"] | 5;
+	uint32_t apTimeoutMinutes = jsonObj["apTimeout"] | Wlan_GetApTimeoutMinutes();
 
 	bool succ = Wlan_SetHostname(strHostname);
 	succ = succ && Wlan_SetApSSID(strApSSID);
@@ -2928,6 +2962,10 @@ static void handlePostMediaHubServers(AsyncWebServerRequest *request, JsonVarian
 }
 
 static void handleDeleteMediaHubServers(AsyncWebServerRequest *request) {
+	if (!request->hasParam("name")) {
+		request->send(400, "text/plain; charset=utf-8", "missing parameter: name");
+		return;
+	}
 	const AsyncWebParameter *p = request->getParam("name");
 	const String name = p->value();
 	if (MediaHub_DeleteServer(name)) {

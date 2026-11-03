@@ -612,7 +612,7 @@
 		"buttonleds": {
 			"title": "Taster-LEDs",
 			"mode": "Betriebsart",
-			"modeExp": "Legt fest, wie die Beleuchtung der Taster gesteuert wird. Im Nachtmodus bleiben die Taster-LEDs ausgeschalten.",
+			"modeExp": "Legt fest, wie die Beleuchtung der Taster angesteuert wird.<br><br><strong>Ein</strong>: Die Taster-LEDs leuchten immer.<br><strong>Aus</strong>: Die Taster-LEDs sind immer ausgeschalten.<br><strong>Dynamisch</strong>: Die Play-Taste blinkt bei Pause. Vor- und Zurück-Taste werden nur eingeschalten, wenn man im aktuellen Wiedergabemodus Vor oder Zurück verfügbar ist.<br><br>Im <strong>Nachtmodus</strong> bleiben die Taster-LEDs ausgeschalten.",
 			"off": "Aus",
 			"on": "Ein",
 			"dynamic": "Dynamisch"

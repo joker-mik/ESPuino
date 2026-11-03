@@ -612,7 +612,7 @@
 		"buttonleds": {
 			"title": "Button LEDs",
 			"mode": "Mode",
-			"modeExp": "Defines how the illuminated buttons are controlled. In night mode, the button LEDs stay off.",
+			"modeExp": "Defines how the button lighting is controlled.<br><br><strong>On</strong>: The button LEDs are always on.<br><strong>Off</strong>: The button LEDs are always off.<br><strong>Dynamic</strong>: The Play button blinks when paused. Previous and Next light up only when the corresponding action is available in the current playback mode.<br><br>In <strong>night mode</strong>, the button LEDs stay off.",
 			"off": "Off",
 			"on": "On",
 			"dynamic": "Dynamic"

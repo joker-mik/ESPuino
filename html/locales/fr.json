@@ -612,7 +612,7 @@
 		"buttonleds": {
 			"title": "LED des boutons",
 			"mode": "Mode",
-			"modeExp": "Définit le comportement de l’éclairage des boutons. En mode nuit, les LED des boutons restent éteintes.",
+			"modeExp": "Définit comment l’éclairage des boutons est commandé.<br><br><strong>Activé</strong> : Les LED des boutons sont toujours allumées.<br><strong>Désactivé</strong> : Les LED des boutons sont toujours éteintes.<br><strong>Dynamique</strong> : Le bouton Lecture clignote en pause. Les boutons Précédent et Suivant ne s’allument que si leur fonction est disponible dans le mode de lecture actuel.<br><br>En <strong>mode nuit</strong>, les LED des boutons restent éteintes.",
 			"off": "Désactivé",
 			"on": "Activé",
 			"dynamic": "Dynamique"

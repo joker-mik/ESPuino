@@ -484,7 +484,7 @@ void Led_ButtonLedsCyclic(void) {
 	const bool playlistActive = playlist != nullptr
 		&& !playlist->empty()
 		&& gPlayProperties.playMode != NO_PLAYLIST
-		&& gPlayProperties.playMode != BUSY
+		&& gPlayProperties.playMode != PLAYLIST_BUSY
 		&& !gPlayProperties.playlistFinished;
 
 	if (!playlistActive) {

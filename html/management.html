@@ -2226,17 +2226,12 @@
 												class="fas fa-circle-question"></i></a>
 									</div>
 									<div class="col-sm-8">
-										<select id="buttonLedMode" name="buttonLedMode" class="form-control form-select"
-											onchange="updateButtonLedModeInfo()">
+										<select id="buttonLedMode" name="buttonLedMode" class="form-control form-select">
 											<option value="0" data-i18n="general.buttonleds.off"></option>
 											<option value="1" selected data-i18n="general.buttonleds.on"></option>
 											<option value="2" data-i18n="general.buttonleds.dynamic"></option>
 										</select>
 									</div>
-								</div>
-								<div id="buttonLedDynamicInfo" class="alert alert-info mt-3 mb-0 d-none" role="alert">
-									<i class="fas fa-circle-info me-2"></i>
-									<span data-i18n="general.buttonleds.dynamicInfo"></span>
 								</div>
 							</div>
 						</fieldset>
@@ -4428,10 +4423,6 @@
 		}
 
 		// list the LED control colors
-		function updateButtonLedModeInfo() {
-			$('#buttonLedDynamicInfo').toggleClass('d-none', $('#buttonLedMode').val() !== '2');
-		}
-
 		function listControlColors(numControlColor, data) {
 			console.log(data);
 			const list = $("#controlColorList");
@@ -4791,7 +4782,6 @@
 				if (typeof ledSettings.buttonLedMode === 'number') {
 					setSettingsSectionActive(document.getElementById('buttonLedConfig'), true);
 					$('#buttonLedMode').val(ledSettings.buttonLedMode);
-					updateButtonLedModeInfo();
 				}
 				$('#initBrightness').bootstrapSlider('setValue', ledSettings.initBrightness);
 				$('#nightBrightness').bootstrapSlider('setValue', ledSettings.nightBrightness);

@@ -48,6 +48,7 @@ void AudioPlayer_AddSeekOffset(const int16_t seconds) {
 // never be touched before the commit -- it also drives the LED progress ring, and writing the preview
 // target into it early would make played-back position look like it already jumped.
 static std::atomic<bool> AudioPlayer_SeekPreviewActive {false};
+static std::atomic<bool> AudioPlayer_SeekPreviewMoved {false};
 static std::atomic<uint8_t> AudioPlayer_SeekPreviewTargetPercent {0};
 static double AudioPlayer_SeekPreviewTargetExact = 0.0; // full precision; only ever touched by the loop() task
 static uint32_t AudioPlayer_SeekPreviewLastInputMs = 0; // only ever touched by the loop() task
@@ -69,29 +70,35 @@ void AudioPlayer_SeekPreviewStart(void) {
 	AudioPlayer_SeekPreviewTargetExact = gPlayProperties.currentRelPos; // start from where playback is, not 0
 	AudioPlayer_SeekPreviewTargetPercent.store(static_cast<uint8_t>(std::lround(AudioPlayer_SeekPreviewTargetExact)), std::memory_order_relaxed);
 	AudioPlayer_SeekPreviewLastInputMs = millis();
+	AudioPlayer_SeekPreviewMoved.store(false, std::memory_order_relaxed);
 	AudioPlayer_SeekPreviewActive.store(true, std::memory_order_relaxed);
 }
 
 void AudioPlayer_SeekPreviewAdjust(const int32_t detents) {
-	if (!AudioPlayer_SeekPreviewActive.load(std::memory_order_relaxed)) {
+	if (!AudioPlayer_SeekPreviewActive.load(std::memory_order_relaxed) || detents == 0) {
 		return;
 	}
 	AudioPlayer_SeekPreviewTargetExact = std::clamp(AudioPlayer_SeekPreviewTargetExact + (detents * 100.0 / AudioPlayer_SeekPreviewSweepCached), 0.0, 100.0);
 	AudioPlayer_SeekPreviewTargetPercent.store(static_cast<uint8_t>(std::lround(AudioPlayer_SeekPreviewTargetExact)), std::memory_order_relaxed);
 	AudioPlayer_SeekPreviewLastInputMs = millis();
+	AudioPlayer_SeekPreviewMoved.store(true, std::memory_order_relaxed);
 }
 
 void AudioPlayer_SeekPreviewCommit(void) {
-	if (!AudioPlayer_SeekPreviewActive.load(std::memory_order_relaxed)) {
+	if (!AudioPlayer_SeekPreviewActive.exchange(false, std::memory_order_relaxed)) {
+		return;
+	}
+	// Pressing and releasing a modifier without turning the encoder must not seek.
+	if (!AudioPlayer_SeekPreviewMoved.exchange(false, std::memory_order_relaxed)) {
 		return;
 	}
 	gPlayProperties.currentRelPos = AudioPlayer_SeekPreviewTargetPercent.load(std::memory_order_relaxed);
 	gPlayProperties.seekmode = SEEK_POS_PERCENT;
-	AudioPlayer_SeekPreviewActive.store(false, std::memory_order_relaxed);
 }
 
 void AudioPlayer_SeekPreviewCancel(void) {
 	AudioPlayer_SeekPreviewActive.store(false, std::memory_order_relaxed);
+	AudioPlayer_SeekPreviewMoved.store(false, std::memory_order_relaxed);
 }
 
 bool AudioPlayer_IsSeekPreviewActive(void) {
@@ -161,7 +168,10 @@ constexpr uint32_t playbackTimeout = 2000;
 uint32_t playbackTimeoutStart = millis();
 uint8_t currentVolume;
 BaseType_t trackQStatus = pdFAIL;
-uint8_t trackCommand = NO_ACTION;
+uint8_t trackCommand = NO_ACTION; // command being processed; only touched by the loop() task
+// Commands from other tasks (web, MQTT, Bluetooth, RFID task). With a plain shared variable a second
+// command overwrote the first before AudioPlayer_Loop() saw it.
+static QueueHandle_t AudioPlayer_TrackCommandQueue = NULL;
 bool audioReturnCode;
 uint32_t AudioPlayer_LastPlaytimeStatsTimestamp = 0u;
 // Announcement state (see AudioPlayer_PlayAnnouncement). The decoder is briefly pointed at another
@@ -413,9 +423,49 @@ static void AudioPlayer_ApplyTone(int8_t gainLowPass, int8_t gainBandPass, int8_
 	audio->setTone(gainLowPass, gainBandPass, gainHighPass);
 }
 
+// Playlist requests from other tasks (web explorer "play" runs in async_tcp). AudioPlayer_SetPlaylist()
+// is not reentrant (static recursion state in SdCard_ReturnPlaylist(), frees the current playlist, drives
+// AudioPlayer_Loop() itself), so it only ever runs in the loop() task. Length 1 with overwrite: the last
+// click wins.
+struct AudioPlayer_PlaylistRequest {
+	char path[255];
+	uint32_t playMode;
+};
+static QueueHandle_t AudioPlayer_PlaylistRequestQueue = NULL;
+
+bool AudioPlayer_RequestPlaylist(const char *_itemToPlay, const uint32_t _playMode) {
+	if (AudioPlayer_PlaylistRequestQueue == NULL || _itemToPlay == nullptr) {
+		return false;
+	}
+	AudioPlayer_PlaylistRequest request;
+	if (strlen(_itemToPlay) >= sizeof(request.path)) {
+		return false;
+	}
+	strncpy(request.path, _itemToPlay, sizeof(request.path));
+	request.playMode = _playMode;
+	xQueueOverwrite(AudioPlayer_PlaylistRequestQueue, &request);
+	return true;
+}
+
+static void AudioPlayer_HandlePlaylistRequest(void) {
+	AudioPlayer_PlaylistRequest request;
+	if (AudioPlayer_PlaylistRequestQueue != NULL && xQueueReceive(AudioPlayer_PlaylistRequestQueue, &request, 0) == pdPASS) {
+		AudioPlayer_SetPlaylist(request.path, 0, request.playMode, 0);
+	}
+}
+
 void AudioPlayer_Init(void) {
 	// create audio object
 	audio = new AudioCustom();
+
+	AudioPlayer_TrackCommandQueue = xQueueCreate(4, sizeof(uint8_t));
+	if (AudioPlayer_TrackCommandQueue == NULL) {
+		Log_Printf(LOGLEVEL_ERROR, unableToCreateQueue, "Track");
+	}
+	AudioPlayer_PlaylistRequestQueue = xQueueCreate(1, sizeof(AudioPlayer_PlaylistRequest));
+	if (AudioPlayer_PlaylistRequestQueue == NULL) {
+		Log_Printf(LOGLEVEL_ERROR, unableToCreateQueue, "Playlist");
+	}
 
 	// load playtime total from NVS
 	playTimeSecTotal = gPrefsSettings.getULong("playTimeTotal", 0);
@@ -565,7 +615,7 @@ void AudioPlayer_Exit(void) {
 	gPrefsSettings.putULong("playTimeTotal", playTimeSecTotal);
 	// Make sure last playposition for audiobook is saved when playback is active while shutdown was initiated
 	if (gPrefsSettings.getBool("savePosShutdown", false) && !gPlayProperties.pausePlay && (gPlayProperties.playMode == AUDIOBOOK || gPlayProperties.playMode == AUDIOBOOK_LOOP || gPlayProperties.playMode == AUDIOBOOK_RECURSIVE)) {
-		AudioPlayer_SetTrackControl(PAUSEPLAY);
+		AudioPlayer_SetTrackControlNow(PAUSEPLAY);
 		// Call the loop explicitely to make sure that PAUSE is set (because this saves the current playpos)
 		AudioPlayer_Loop();
 	}
@@ -607,6 +657,8 @@ void AudioPlayer_Cyclic(void) {
 			AudioPlayer_lastCheckpointTimestamp = millis();
 		}
 	}
+
+	AudioPlayer_HandlePlaylistRequest();
 
 	// Actual loop stuff
 	AudioPlayer_Loop();
@@ -907,6 +959,10 @@ void AudioPlayer_Loop() {
 		Log_Println(announcementTimeout, LOGLEVEL_ERROR);
 		System_IndicateError();
 		gPlayProperties.trackFinished = true; // handed to the branch below, which restores playback
+	}
+
+	if (trackCommand == NO_ACTION && AudioPlayer_TrackCommandQueue != NULL) {
+		xQueueReceive(AudioPlayer_TrackCommandQueue, &trackCommand, 0);
 	}
 
 	if (newPlayListAvailable || gPlayProperties.trackFinished || trackCommand != NO_ACTION) {
@@ -1354,7 +1410,7 @@ void AudioPlayer_Loop() {
 	// Seek-preview (CMD_SEEK_PREVIEW rotary gesture): commit once the encoder has been idle for the
 	// configured delay. A release-triggered commit happens directly from RotaryEncoder.cpp instead of
 	// waiting for this -- this is only the "held but stopped turning" case.
-	if (AudioPlayer_SeekPreviewActive.load(std::memory_order_relaxed)) {
+	if (AudioPlayer_SeekPreviewActive.load(std::memory_order_relaxed) && AudioPlayer_SeekPreviewMoved.load(std::memory_order_relaxed)) {
 		if (millis() - AudioPlayer_SeekPreviewLastInputMs >= AudioPlayer_SeekPreviewDelayMsCached) {
 			AudioPlayer_SeekPreviewCommit();
 		}
@@ -1559,7 +1615,7 @@ void AudioPlayer_PauseOnMinVolume(const uint8_t oldVolume, const uint8_t newVolu
 void AudioPlayer_SetPlaylist(const char *_itemToPlay, const uint32_t _lastPlayPos, const uint32_t _playMode, const uint16_t _trackLastPlayed) {
 	// Make sure last playposition for audiobook is saved when new RFID-tag is applied
 	if (gPlayProperties.SavePlayPosRfidChange && !gPlayProperties.pausePlay && (gPlayProperties.playMode == AUDIOBOOK || gPlayProperties.playMode == AUDIOBOOK_LOOP || gPlayProperties.playMode == AUDIOBOOK_RECURSIVE)) {
-		AudioPlayer_SetTrackControl(PAUSEPLAY);
+		AudioPlayer_SetTrackControlNow(PAUSEPLAY);
 		while (!gPlayProperties.pausePlay) { // Make sure to wait until playback is paused in order to be sure that playposition saved in NVS
 			AudioPlayer_Loop();
 			vTaskDelay(portTICK_PERIOD_MS * 100u);
@@ -1597,7 +1653,7 @@ void AudioPlayer_SetPlaylist(const char *_itemToPlay, const uint32_t _lastPlayPo
 		Log_Println(errorOccured, LOGLEVEL_ERROR);
 		System_IndicateError();
 		if (gPlayProperties.playMode != NO_PLAYLIST) {
-			AudioPlayer_SetTrackControl(STOP);
+			AudioPlayer_SetTrackControlNow(STOP);
 		}
 		return;
 	}
@@ -1608,7 +1664,7 @@ void AudioPlayer_SetPlaylist(const char *_itemToPlay, const uint32_t _lastPlayPo
 		Log_Println(noMp3FilesInDir, LOGLEVEL_NOTICE);
 		System_IndicateError();
 		if (!gPlayProperties.pausePlay) {
-			AudioPlayer_SetTrackControl(STOP);
+			AudioPlayer_SetTrackControlNow(STOP);
 			while (!gPlayProperties.pausePlay) {
 				AudioPlayer_Loop();
 				vTaskDelay(portTICK_PERIOD_MS * 10u);
@@ -1821,8 +1877,20 @@ std::optional<Playlist *> AudioPlayer_ReturnPlaylistFromWebstream(const char *_w
 	return playlist;
 }
 
-// Adds new control-command to control-queue
+// Adds new control-command to control-queue (any task)
 void AudioPlayer_SetTrackControl(const uint8_t new_trackCommand) {
+	if (AudioPlayer_TrackCommandQueue == NULL) {
+		trackCommand = new_trackCommand; // before AudioPlayer_Init()
+		return;
+	}
+	if (xQueueSend(AudioPlayer_TrackCommandQueue, &new_trackCommand, 0) != pdPASS) {
+		Log_Printf(LOGLEVEL_NOTICE, trackCommandQueueFull, new_trackCommand);
+	}
+}
+
+// For sequences in the loop() task that drive AudioPlayer_Loop() themselves right afterwards and wait for
+// exactly this command (pause before a playlist change, stop on error or before a MediaHub sync).
+void AudioPlayer_SetTrackControlNow(const uint8_t new_trackCommand) {
 	trackCommand = new_trackCommand;
 }
 

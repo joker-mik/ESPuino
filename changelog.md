@@ -2,6 +2,14 @@
 
 ## DEV-branch
 
+## Version 3.2 (07.11.2026)
+
+* 07.11.2026: MQTT: `ambient_light` and `sleep` now report their state (`ON`/`OFF`) as announced, `lock_controls` reports `ON`/`OFF` right after connecting instead of `1`/`0`, and ESPuino registers a last will: if it drops off without a clean shutdown (power cut, crash, out of WiFi range), the broker itself publishes `Offline` on `state` after about 90 seconds (keepalive is now 60 s).
+
+* 07.11.2026: Seek preview: pressing and releasing a button that has the seek preview assigned to it no longer seeks when the rotary encoder wasn't turned. A short press on Next with the seek preview on the same button used to jump to the new track and then try to seek it to the old position, which failed and made the LEDs flash red. Holding such a button without turning no longer seeks after the idle delay either. [#476](https://github.com/biologist79/ESPuino/pull/476)
+
+* 01.11.2026: Player: track commands and playback from the file browser are handed to the main loop via queues, and the player flags are no longer bitfields shared between tasks, so quick presses and flags no longer get lost. This also fixes two overflows: "sleep after five tracks" no longer switches itself off from track 59 on, and playlists with more than 511 tracks no longer wrap around to track 0. Pressing "play" in the file browser no longer builds the playlist in the webserver task, which could corrupt memory together with a card applied at the same time and tripped the webserver's watchdog for big folders. [#472](https://github.com/biologist79/ESPuino/pull/472)
+
 * 30.10.2026: LEDs: FastLED is replaced by a small built-in driver for WS2812-type LEDs. Colors, brightness and animations stay the same, but the LED task needs about a fifth of the CPU time it used to: an unchanged picture is no longer sent to the LEDs again (only once a second as a refresh), and sending no longer makes the task wait. As before, the LEDs are driven via SPI with SD-MMC and via RMT with an SD card in SPI mode. Supported chipsets are `WS2812`, `WS2812B`, `WS2813`, `WS2815`, `SK6812` and `NEOPIXEL`; a `settings-override.h` with any other `CHIPSET` no longer builds. [#474](https://github.com/biologist79/ESPuino/pull/474)
 
 * 30.10.2026: Library update: pioarduino platform 55.03.312-1 (Arduino 3.3.12), ESP32-audioI2S 4.0.1 (upstream again instead of the 16-bit fork), ESP32Encoder 5.0.0, ESPAsyncWebServer 3.12.1, arduino-audio-tools 1.2.6. The new platform needs PlatformIO Core 6.2.0 or newer - update it if the build fails. With the new audio library, mono playback no longer corrupts memory, which made the box crash when shutting down ([forum #4902](https://forum.espuino.de/t/ausschalten-klappt-nur-ohne-rfid-tag/4902)). In Bluetooth mode the audio DMA buffer is smaller (12 instead of 32 KB) to leave more internal RAM for Bluetooth. [#473](https://github.com/biologist79/ESPuino/pull/473)
